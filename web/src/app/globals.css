@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-claude-bg text-claude-text antialiased;
+  }
+
+  * {
+    @apply scrollbar-thin scrollbar-thumb-claude-border scrollbar-track-transparent;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thumb-claude-border::-webkit-scrollbar-thumb {
+    @apply bg-claude-border rounded-full;
+  }
+
+  .scrollbar-track-transparent::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+}
