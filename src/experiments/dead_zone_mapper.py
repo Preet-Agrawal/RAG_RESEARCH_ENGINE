@@ -33,12 +33,25 @@ class DeadZoneMapperExperiment(Experiment):
 
     def setup(self):
         """Initialize LLM client and document generator."""
+        import os
         print("Setting up Dead Zone Mapper experiment...")
 
+        provider = self.config.get("llm_provider", "groq")
+
+        # Load API key from environment
+        api_key = None
+        if provider == "groq":
+            api_key = os.getenv("GROQ_API_KEY")
+        elif provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+        elif provider == "anthropic":
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+
         self.llm_client = LLMClient(
-            provider=self.config.get("llm_provider", "openai"),
-            model=self.config.get("llm_model", "gpt-4-turbo-preview"),
-            temperature=0.0
+            provider=provider,
+            model=self.config.get("llm_model", "llama3-8b-8192"),
+            temperature=0.0,
+            api_key=api_key
         )
 
         self.doc_generator = DocumentGenerator()

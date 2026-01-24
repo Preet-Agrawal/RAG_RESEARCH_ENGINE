@@ -24,11 +24,11 @@ def run_dead_zone_mapper(num_trials: int = 10):
     config = get_experiment_config("dead_zone_mapper")
 
     experiment = DeadZoneMapperExperiment({
-        "llm_provider": "openai",
-        "llm_model": "gpt-4-turbo-preview",
+        "llm_provider": "groq",
+        "llm_model": "llama-3.1-8b-instant",
         "needle_positions": [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95],
-        "num_documents": 20,
-        "tokens_per_doc": 500
+        "num_documents": 10,
+        "tokens_per_doc": 250
     })
 
     results = experiment.run(num_trials=num_trials, save=True)
@@ -51,8 +51,8 @@ def run_context_restructuring(num_trials: int = 10):
     print("🔬 "*30 + "\n")
 
     experiment = ContextRestructuringExperiment({
-        "llm_provider": "openai",
-        "llm_model": "gpt-4-turbo-preview",
+        "llm_provider": "groq",
+        "llm_model": "llama-3.1-8b-instant",
         "num_documents": 20,
         "tokens_per_doc": 500
     })

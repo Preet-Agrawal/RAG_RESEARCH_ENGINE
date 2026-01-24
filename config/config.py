@@ -13,15 +13,17 @@ load_dotenv()
 @dataclass
 class ModelConfig:
     """Configuration for language models."""
-    provider: str = "openai"  # openai, anthropic
-    model_name: str = "gpt-4-turbo-preview"
+    provider: str = "groq"  # groq, openai, anthropic
+    model_name: str = "llama-3.1-8b-instant"
     temperature: float = 0.0
     max_tokens: int = 4096
     api_key: Optional[str] = None
 
     def __post_init__(self):
         if self.api_key is None:
-            if self.provider == "openai":
+            if self.provider == "groq":
+                self.api_key = os.getenv("GROQ_API_KEY")
+            elif self.provider == "openai":
                 self.api_key = os.getenv("OPENAI_API_KEY")
             elif self.provider == "anthropic":
                 self.api_key = os.getenv("ANTHROPIC_API_KEY")
