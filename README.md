@@ -40,7 +40,35 @@ This engine implements **5 comprehensive experiments** to map and solve this pro
 4. **Attention Anchoring** - Use markers and formatting to force middle attention
 5. **Query-Aware Compression** - Compress irrelevant content, expand relevant content
 
-## 🚀 Quick Start
+## 🎨 Web Interface (NEW!)
+
+Beautiful Claude-style web interface for interactive PDF analysis!
+
+### Features
+- 🎨 Dark theme with Claude-inspired design
+- 📄 Drag & drop PDF upload
+- 💬 Chat interface for questions
+- ⚡ Real-time responses with Groq
+- 🔬 Visual "Lost in the Middle" testing
+
+### Quick Setup
+
+```bash
+# Run the setup script
+./setup_web.sh
+
+# Start the web server
+cd web
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+📚 **Full Guide**: See [WEB_INTERFACE.md](WEB_INTERFACE.md)
+
+---
+
+## 🚀 Quick Start (Command Line)
 
 ### Installation
 
