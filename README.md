@@ -2,7 +2,7 @@
 
 A comprehensive research framework for studying and solving the "Lost in the Middle" problem in long-context language models.
 
-> **🆓 NEW: Now supports FREE local models via Ollama!** No API keys needed. See [README_OLLAMA.md](README_OLLAMA.md)
+> **🆓 FREE: Uses Groq API - blazing fast, no cost, no laptop heat!** Get your free API key at [console.groq.com](https://console.groq.com)
 
 ## 🎯 What This Solves
 
@@ -42,10 +42,6 @@ This engine implements **5 comprehensive experiments** to map and solve this pro
 
 ## 🚀 Quick Start
 
-**Choose Your Path:**
-- 🆓 **FREE with Ollama** (no API keys): See [README_OLLAMA.md](README_OLLAMA.md)
-- 💳 **Paid APIs** (OpenAI/Anthropic): Continue below
-
 ### Installation
 
 ```bash
@@ -60,14 +56,12 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Set up API keys (skip if using Ollama)
+# Set up Groq API key (FREE)
 cp .env.example .env
-# Edit .env and add your OpenAI/Anthropic API keys
+# Edit .env and add your GROQ_API_KEY from console.groq.com
 ```
 
-### Running Experiments (with Paid APIs)
-
-**Or use Ollama for FREE** - See [README_OLLAMA.md](README_OLLAMA.md) for Ollama instructions
+### Running Experiments
 
 ```bash
 # Run a quick test (3 trials)
@@ -224,8 +218,8 @@ Use the findings to:
 ## 🔧 Configuration
 
 Edit `config/config.py` to customize:
-- LLM provider (OpenAI, Anthropic)
-- Model selection
+- LLM provider (Groq, OpenAI, Anthropic)
+- Model selection (default: llama-3.1-8b-instant via Groq)
 - Number of documents
 - Document length (tokens)
 - Needle positions
@@ -279,15 +273,15 @@ If you use this research engine, please cite:
 ## ⚠️ Requirements
 
 - Python 3.8+
-- OpenAI API key (GPT-4 recommended)
-- Or Anthropic API key (Claude 3 Opus/Sonnet)
+- Groq API key (FREE - get it at console.groq.com)
+- Or OpenAI/Anthropic API keys (paid alternatives)
 
 ## 💡 Tips for Best Results
 
-1. **Use GPT-4 or Claude 3** - Better long-context handling
-2. **Start with quick tests** - Use `--quick` flag first
+1. **Start with Groq (FREE)** - Fast, free, and great for testing
+2. **Use quick tests first** - Use `--quick` flag (3 trials)
 3. **Run multiple trials** - 15-20 trials for statistical significance
-4. **Check token costs** - Each trial uses ~10-20k tokens
+4. **Watch rate limits** - Groq free tier: 30 requests/min, 6000 tokens/min
 
 ## 🐛 Troubleshooting
 

@@ -1,161 +1,92 @@
-# 🚀 START HERE - Choose Your Path
+# 🚀 START HERE - Quick Setup Guide
 
-## You Have 2 Options:
+## Getting Started with RAG Research Engine
+
+This research framework uses **Groq** - a FREE, fast cloud API service.
 
 ---
 
-## Option 1: FREE with Ollama (Recommended to Start) 🆓
+## Quick Start (2 Minutes)
 
-**No API keys needed! Completely local and free.**
+### 1. Get Your FREE Groq API Key
 
-### Quick Start (5 minutes):
+1. Go to [console.groq.com](https://console.groq.com)
+2. Sign up (it's free!)
+3. Navigate to "API Keys"
+4. Create a new API key
+5. Copy the key
+
+### 2. Install Dependencies
+
 ```bash
-# 1. Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
+# Clone the repository
+git clone <your-repo-url>
+cd RAG_RESEARCH_ENGINE
 
-# 2. Pull a model
-ollama pull llama3:8b
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# 3. Test it works
-python test_ollama.py
-
-# 4. Run your first experiment
-python run_experiments.py dead_zone --quick \
-  --provider ollama --model llama3:8b
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-**✅ Pros:**
-- Completely free ($0)
-- No API keys
-- Works offline
-- Privacy (data stays local)
-- Still shows "Lost in the Middle" problem
-- Valid for research/papers
+### 3. Configure API Key
 
-**⚠️ Cons:**
-- Needs 8-16GB RAM
-- Slightly lower accuracy than GPT-4
-- Slower on CPU (fast with GPU)
-
-**📚 Detailed Guide:** [README_OLLAMA.md](README_OLLAMA.md)
-
----
-
-## Option 2: Paid APIs (OpenAI/Anthropic)
-
-**Use cloud APIs for highest accuracy.**
-
-### Quick Start (2 minutes):
 ```bash
-# 1. Get API key from OpenAI or Anthropic
-# OpenAI: https://platform.openai.com/api-keys
-# Anthropic: https://console.anthropic.com/
-
-# 2. Add to .env file
+# Copy environment template
 cp .env.example .env
-nano .env  # Add your API key
 
-# 3. Run experiment
-python run_experiments.py dead_zone --quick
+# Edit .env and add your Groq API key
+# GROQ_API_KEY=gsk_your_actual_key_here
 ```
 
-**✅ Pros:**
-- Highest accuracy (GPT-4)
-- Fast responses
-- No local resources needed
-- Works on any machine
+### 4. Run Your First Experiment
 
-**⚠️ Cons:**
-- Costs money (~$30-40 per full experiment)
-- Needs API key
-- Requires internet
-- Rate limits
+```bash
+# Quick test (3 trials, ~3 minutes)
+python run_experiments.py dead_zone --quick
 
-**📚 Detailed Guide:** [GETTING_STARTED.md](GETTING_STARTED.md)
+# Full experiment (10 trials, ~10 minutes)
+python run_experiments.py dead_zone --trials 10
+```
 
 ---
 
-## Which Should You Choose?
+## What is Groq?
 
-### Choose Ollama (FREE) if:
-- ✅ You want to experiment for free
-- ✅ You have 8-16GB RAM available
-- ✅ You're doing initial testing/iteration
-- ✅ Privacy is important
-- ✅ You don't mind slightly lower accuracy
+**Groq** is a cloud inference platform that provides:
+- ✅ **FREE tier** with generous limits
+- ✅ **Blazing fast** - 500+ tokens/second
+- ✅ **No laptop heat** - runs on their servers
+- ✅ **Good models** - Llama 3.1, Mixtral, Gemma
 
-### Choose Paid APIs if:
-- ✅ You need highest possible accuracy
-- ✅ You're running final experiments for publication
-- ✅ You have API budget
-- ✅ You want fastest results
-- ✅ You're on a low-resource machine
-
-### Best of Both Worlds:
-1. **Start with Ollama** - Test everything for free
-2. **Validate with GPT-4** - Run final experiments for paper
-3. **Save money** - Only pay for what you need
-
----
-
-## Quick Comparison
-
-| Feature | Ollama (FREE) | GPT-4 | Claude 3 |
-|---------|---------------|-------|----------|
-| **Cost per experiment** | $0 | $30-40 | $5-10 |
-| **Setup time** | 5 min | 2 min | 2 min |
-| **Accuracy** | Good (85%) | Best (95%) | Better (90%) |
-| **Speed** | 3-5 sec/trial | 2-3 sec | 2-3 sec |
-| **Privacy** | Local | Cloud | Cloud |
-| **RAM needed** | 8-16GB | None | None |
-| **Valid for research?** | ✅ Yes | ✅ Yes | ✅ Yes |
-
----
-
-## Next Steps by Path
-
-### If You Choose Ollama (FREE):
-1. Read [README_OLLAMA.md](README_OLLAMA.md)
-2. Install Ollama: `curl -fsSL https://ollama.com/install.sh | sh`
-3. Pull model: `ollama pull llama3:8b`
-4. Test: `python test_ollama.py`
-5. Experiment: See examples below
-
-### If You Choose Paid APIs:
-1. Read [GETTING_STARTED.md](GETTING_STARTED.md)
-2. Get API key (OpenAI or Anthropic)
-3. Add to `.env` file
-4. Test: `python run_experiments.py dead_zone --quick`
-5. Experiment: See examples below
+### Free Tier Limits:
+- 30 requests per minute
+- 6,000 tokens per minute
+- More than enough for research experiments!
 
 ---
 
 ## Example Commands
 
-### Ollama (Free):
+### Quick Test (3 trials):
 ```bash
-# Quick test (3 trials, ~5 min, FREE)
-python run_experiments.py dead_zone --quick \
-  --provider ollama --model llama3:8b
-
-# Full experiment (15 trials, ~20 min, FREE)
-python run_experiments.py dead_zone --trials 15 \
-  --provider ollama --model llama3:8b
-
-# All experiments (FREE!)
-python run_experiments.py all --trials 10 \
-  --provider ollama --model llama3:8b
+python run_experiments.py dead_zone --quick
 ```
 
-### GPT-4 (Paid):
+### Full Dead Zone Experiment (10 trials):
 ```bash
-# Quick test (3 trials, ~3 min, ~$2)
-python run_experiments.py dead_zone --quick
+python run_experiments.py dead_zone --trials 10
+```
 
-# Full experiment (15 trials, ~15 min, ~$30)
-python run_experiments.py dead_zone --trials 15
+### Context Restructuring Experiment:
+```bash
+python run_experiments.py restructuring --trials 10
+```
 
-# All experiments (~$100)
+### All Experiments:
+```bash
 python run_experiments.py all --trials 10
 ```
 
@@ -163,87 +94,98 @@ python run_experiments.py all --trials 10
 
 ## What You'll Get
 
-Regardless of which option you choose, you'll get:
+After running experiments, you'll have:
 
-✅ **U-shaped accuracy curve** showing "Lost in the Middle"
-✅ **Publication-ready visualizations**
-✅ **Statistical analysis** with significance tests
-✅ **Recovery strategy comparisons**
-✅ **Complete results** in JSON/CSV
-✅ **Valid research findings** for papers
+✅ **U-shaped accuracy curve** showing "Lost in the Middle" phenomenon
+✅ **Publication-ready visualizations** (saved as PNG files)
+✅ **Statistical analysis** with confidence intervals
+✅ **Detailed results** in JSON and CSV formats
+✅ **Heatmaps** showing attention patterns
 
-The "Lost in the Middle" problem exists across **ALL models**!
+All saved to `./results/` directory!
 
 ---
 
-## Still Unsure? Try This:
+## Configuration
 
-### 5-Minute Test with Ollama (FREE):
-```bash
-# Install and test (one-time, ~5 min)
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull llama3:8b
-python test_ollama.py
+The system is pre-configured for Groq, but you can customize in `config/config.py`:
 
-# Run ONE quick experiment (~3 min)
-python run_experiments.py dead_zone --quick \
-  --provider ollama --model llama3:8b
+- **Model**: llama-3.1-8b-instant (default)
+- **Documents**: 10 documents × 250 tokens each
+- **Positions**: 11 test positions (5%, 10%, ..., 95%)
+- **Trials**: Configurable (3 for quick, 10+ for research)
+
+---
+
+## Troubleshooting
+
+### Rate Limit Errors?
+- Wait 60 seconds between runs
+- Groq free tier resets every minute
+- Or reduce document size in `run_experiments.py`
+
+### API Key Not Working?
+- Check your `.env` file has `GROQ_API_KEY=gsk_...`
+- Make sure `.env` is in the project root
+- Try: `python -c "from dotenv import load_dotenv; import os; load_dotenv(); print(os.getenv('GROQ_API_KEY'))"`
+
+### Import Errors?
+- Make sure you're in the virtual environment
+- Run: `pip install -r requirements.txt`
+
+---
+
+## Alternative Providers
+
+Want to use a different provider? You can configure:
+
+### OpenAI (Paid):
+```python
+# In run_experiments.py, change:
+"llm_provider": "openai",
+"llm_model": "gpt-4-turbo-preview",
 ```
 
-**If it works and you're happy**: Keep using Ollama (free)!
-
-**If you want higher accuracy**: Get API key and switch to GPT-4.
-
----
-
-## Documentation Index
-
-| Document | Purpose |
-|----------|---------|
-| **[README_OLLAMA.md](README_OLLAMA.md)** | Complete Ollama guide (FREE) |
-| **[OLLAMA_SETUP.md](OLLAMA_SETUP.md)** | Detailed Ollama setup |
-| **[GETTING_STARTED.md](GETTING_STARTED.md)** | Paid API setup |
-| **[README.md](README.md)** | Full project documentation |
-| **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** | One-page cheat sheet |
-| **[RESEARCH_PAPER_TEMPLATE.md](RESEARCH_PAPER_TEMPLATE.md)** | For writing papers |
+### Anthropic (Paid):
+```python
+# In run_experiments.py, change:
+"llm_provider": "anthropic",
+"llm_model": "claude-3-opus-20240229",
+```
 
 ---
 
-## Get Help
+## Next Steps
 
-- **Test not working?** Run `python test_ollama.py` for diagnostics
-- **Ollama issues?** See [OLLAMA_SETUP.md](OLLAMA_SETUP.md) troubleshooting
-- **API issues?** See [GETTING_STARTED.md](GETTING_STARTED.md) troubleshooting
-- **General questions?** See [README.md](README.md)
-
----
-
-## My Recommendation
-
-**Start with Ollama (FREE):**
-1. Zero cost to experiment
-2. Learn the system
-3. Iterate on your research
-4. Validate findings
-
-**Then (optionally) validate with GPT-4:**
-1. Run final experiments
-2. Get highest accuracy numbers
-3. Publish with both results
-4. Show consistency across models
-
-**This gives you the best of both worlds!**
+1. **Run your first experiment** (see commands above)
+2. **Check results** in `./results/dead_zone_mapper/`
+3. **View visualizations** in `./results/dead_zone_mapper/visualizations/`
+4. **Read full documentation** in [README.md](README.md)
+5. **Customize experiments** in `config/config.py`
 
 ---
 
-## Ready to Start?
+## Documentation
 
-### For FREE option (Ollama):
-👉 **Go to [README_OLLAMA.md](README_OLLAMA.md)**
-
-### For Paid option (OpenAI/Anthropic):
-👉 **Go to [GETTING_STARTED.md](GETTING_STARTED.md)**
+| File | Description |
+|------|-------------|
+| [README.md](README.md) | Full project documentation |
+| [START_HERE.md](START_HERE.md) | This quick start guide |
+| `config/config.py` | Configuration settings |
+| `run_experiments.py` | Main experiment runner |
 
 ---
+
+## Ready to Begin?
+
+Run your first experiment now:
+
+```bash
+python run_experiments.py dead_zone --quick
+```
 
 **Happy researching!** 🔬
+
+---
+
+**FREE • FAST • NO LAPTOP HEAT**
