@@ -1,4 +1,4 @@
-#!/Users/manojkumawat/Rag/RAG_RESEARCH_ENGINE/venv/bin/python3.11
+#!/Users/manojkumawat/r/RAG_RESEARCH_ENGINE/venv/bin/python3.11
 import sys
 from plotly.io._kaleido import plotly_get_chrome
 if __name__ == '__main__':

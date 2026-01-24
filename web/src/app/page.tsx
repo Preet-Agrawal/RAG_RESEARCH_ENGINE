@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import PDFUploader from '@/components/PDFUploader';
 import ChatInterface from '@/components/ChatInterface';
-import { FileText } from 'lucide-react';
-import type { Message, PDFDocument } from '@/types';
+import { FileText, Beaker } from 'lucide-react';
+import type { Message, PDFDocument, Strategy, RAGResponse } from '@/types';
 import axios from 'axios';
 
 export default function Home() {
@@ -13,6 +13,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedStrategy, setSelectedStrategy] = useState<Strategy>('combined');
 
   const handleUpload = async (file: File) => {
     setIsUploading(true);
@@ -40,7 +41,7 @@ export default function Home() {
           {
             id: Date.now().toString(),
             role: 'assistant',
-            content: `PDF "${file.name}" uploaded successfully! You can now ask questions about this document. I'll test the "Lost in the Middle" phenomenon by analyzing where information is retrieved from in the document.`,
+            content: `PDF "${file.name}" uploaded successfully!\n\nYou can now ask questions about this document. Select a recovery strategy above to optimize how the LLM retrieves information from the middle of the document.\n\nTip: Try the same question with different strategies to compare results!`,
             timestamp: new Date(),
           },
         ]);
@@ -73,9 +74,10 @@ export default function Home() {
 
     setIsLoading(true);
     try {
-      const response = await axios.post('/api/ask', {
+      const response = await axios.post<RAGResponse>('/api/ask', {
         question: messageText,
         filename: uploadedFilename,
+        strategy: selectedStrategy,
       });
 
       if (response.data.success) {
@@ -84,6 +86,13 @@ export default function Home() {
           role: 'assistant',
           content: response.data.answer,
           timestamp: new Date(),
+          metadata: {
+            strategyUsed: response.data.strategyUsed,
+            confidence: response.data.confidence,
+            latency: response.data.latency,
+            chunksProcessed: response.data.chunksProcessed,
+            strategyExplanation: response.data.strategyExplanation,
+          },
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
@@ -103,6 +112,10 @@ export default function Home() {
     }
   };
 
+  const handleStrategyChange = (strategy: Strategy) => {
+    setSelectedStrategy(strategy);
+  };
+
   return (
     <div className="h-screen flex flex-col">
       {/* Header */}
@@ -110,14 +123,14 @@ export default function Home() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-claude-accent/10 rounded-lg">
-              <FileText className="w-6 h-6 text-claude-accent" />
+              <Beaker className="w-6 h-6 text-claude-accent" />
             </div>
             <div>
               <h1 className="text-xl font-semibold text-claude-text">
                 RAG Research Engine
               </h1>
               <p className="text-sm text-claude-text-secondary">
-                Lost in the Middle Analysis
+                Lost in the Middle Recovery System
               </p>
             </div>
           </div>
@@ -152,6 +165,8 @@ export default function Home() {
                   onSendMessage={handleSendMessage}
                   isLoading={isLoading}
                   disabled={!currentDocument}
+                  selectedStrategy={selectedStrategy}
+                  onStrategyChange={handleStrategyChange}
                 />
               </div>
             </div>
@@ -166,7 +181,49 @@ export default function Home() {
                     <p className="text-claude-text">Uploading PDF...</p>
                   </div>
                 ) : (
-                  <PDFUploader onUpload={handleUpload} />
+                  <div className="space-y-6">
+                    <div className="text-center mb-8">
+                      <div className="inline-flex items-center justify-center p-3 bg-claude-accent/10 rounded-xl mb-4">
+                        <Beaker className="w-10 h-10 text-claude-accent" />
+                      </div>
+                      <h2 className="text-2xl font-semibold text-claude-text mb-2">
+                        Lost in the Middle Recovery
+                      </h2>
+                      <p className="text-claude-text-secondary max-w-md mx-auto">
+                        Research shows LLMs often miss information in the middle of long documents.
+                        Our strategies help recover this "lost" content.
+                      </p>
+                    </div>
+                    <PDFUploader onUpload={handleUpload} />
+                    <div className="bg-claude-surface border border-claude-border rounded-lg p-4">
+                      <h3 className="text-sm font-medium text-claude-text mb-3 flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        Available Strategies
+                      </h3>
+                      <div className="grid gap-2 text-sm">
+                        <div className="flex items-start gap-2">
+                          <span className="text-claude-accent font-medium">Combined:</span>
+                          <span className="text-claude-text-secondary">All strategies together (recommended)</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-claude-accent font-medium">Attention Anchoring:</span>
+                          <span className="text-claude-text-secondary">Markers and instructions for middle focus</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-claude-accent font-medium">Relevance Restructuring:</span>
+                          <span className="text-claude-text-secondary">Moves relevant content to edges</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-claude-accent font-medium">Chunked Reading:</span>
+                          <span className="text-claude-text-secondary">Processes in smaller segments</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="text-claude-accent font-medium">Baseline:</span>
+                          <span className="text-claude-text-secondary">Standard approach (for comparison)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -177,7 +234,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="bg-claude-surface border-t border-claude-border px-6 py-3">
         <div className="max-w-7xl mx-auto text-center text-xs text-claude-text-secondary">
-          Powered by Groq • Testing "Lost in the Middle" Phenomenon
+          Powered by Groq (Llama 3.1) | Addressing the "Lost in the Middle" Phenomenon
         </div>
       </footer>
     </div>
