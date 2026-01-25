@@ -247,6 +247,100 @@ CRITICAL: LLMs tend to ignore middle content. To counter this:
         return prompts.get(strategy, prompts["baseline"])
 
 
+def summarize_document(pdf_text: str) -> Dict[str, Any]:
+    """
+    Summarize all chunks of the document with special focus on middle content.
+    This helps understand the full document before asking questions.
+    """
+    import time
+    start_time = time.time()
+
+    try:
+        client = LLMClient(
+            provider="groq",
+            model="llama-3.1-8b-instant",
+            temperature=0.0,
+            api_key=os.getenv("GROQ_API_KEY")
+        )
+
+        processor = MiddleRecoveryProcessor(client)
+        chunks = processor.chunk_text(pdf_text, chunk_size=400, overlap=50)
+
+        num_chunks = len(chunks)
+        mid_start = num_chunks // 3
+        mid_end = 2 * num_chunks // 3
+
+        chunk_summaries = []
+
+        for i, chunk in enumerate(chunks):
+            # Determine position zone
+            if i < mid_start:
+                zone = "beginning"
+            elif i >= mid_end:
+                zone = "end"
+            else:
+                zone = "middle"
+
+            # Create summary prompt - extra emphasis for middle chunks
+            if zone == "middle":
+                prompt = f"""Summarize this section from the MIDDLE of a document.
+This is a CRITICAL section that is often overlooked. Extract ALL key information.
+
+Section {i+1}/{num_chunks} (MIDDLE - IMPORTANT):
+{chunk.content}
+
+Provide a concise but COMPLETE summary (2-3 sentences). Include specific facts, numbers, names, or key points:"""
+            else:
+                prompt = f"""Summarize this section from the {zone} of a document.
+
+Section {i+1}/{num_chunks}:
+{chunk.content}
+
+Provide a concise summary (1-2 sentences):"""
+
+            response = client.generate(prompt, max_tokens=150)
+
+            chunk_summaries.append({
+                "chunk_id": i + 1,
+                "total_chunks": num_chunks,
+                "zone": zone,
+                "position": round(chunk.position * 100),
+                "summary": response.text.strip(),
+                "is_middle": zone == "middle"
+            })
+
+        # Generate overall document summary
+        all_summaries = "\n".join([f"Section {s['chunk_id']}: {s['summary']}" for s in chunk_summaries])
+
+        overall_prompt = f"""Based on these section summaries, provide an overall document summary.
+Pay SPECIAL attention to the MIDDLE sections as they contain important information.
+
+{all_summaries}
+
+Overall document summary (3-4 sentences covering key points from ALL sections including the middle):"""
+
+        overall_response = client.generate(overall_prompt, max_tokens=300)
+
+        return {
+            "success": True,
+            "total_chunks": num_chunks,
+            "chunk_summaries": chunk_summaries,
+            "overall_summary": overall_response.text.strip(),
+            "middle_chunks_count": sum(1 for s in chunk_summaries if s["is_middle"]),
+            "latency": time.time() - start_time
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "total_chunks": 0,
+            "chunk_summaries": [],
+            "overall_summary": "",
+            "latency": time.time() - start_time
+        }
+
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     """Extract text from PDF file."""
     try:
@@ -395,15 +489,14 @@ Answer:"""
 
 
 def main():
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 2:
         print(json.dumps({
-            "error": "Usage: process_pdf.py <pdf_path> <question> [strategy]"
+            "error": "Usage: process_pdf.py <pdf_path> [action] [question] [strategy]"
         }))
         sys.exit(1)
 
     pdf_path = sys.argv[1]
-    question = sys.argv[2]
-    strategy = sys.argv[3] if len(sys.argv) > 3 else "combined"
+    action = sys.argv[2] if len(sys.argv) > 2 else "summarize"
 
     # Check if PDF exists
     if not os.path.exists(pdf_path):
@@ -421,8 +514,20 @@ def main():
         }))
         sys.exit(1)
 
-    # Answer the question with strategy
-    result = answer_question(pdf_text, question, strategy)
+    if action == "summarize":
+        # Summarize all chunks
+        result = summarize_document(pdf_text)
+    elif action == "ask":
+        # Answer a question
+        if len(sys.argv) < 4:
+            print(json.dumps({"error": "Question required for 'ask' action"}))
+            sys.exit(1)
+        question = sys.argv[3]
+        strategy = sys.argv[4] if len(sys.argv) > 4 else "combined"
+        result = answer_question(pdf_text, question, strategy)
+    else:
+        print(json.dumps({"error": f"Unknown action: {action}"}))
+        sys.exit(1)
 
     # Output JSON result
     print(json.dumps(result, indent=2))

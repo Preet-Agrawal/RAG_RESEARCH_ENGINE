@@ -73,3 +73,22 @@ export interface RAGResponse {
   strategyExplanation: string;
   error?: string;
 }
+
+export interface ChunkSummary {
+  chunkId: number;
+  totalChunks: number;
+  zone: 'beginning' | 'middle' | 'end';
+  position: number;
+  summary: string;
+  isMiddle: boolean;
+}
+
+export interface SummarizeResponse {
+  success: boolean;
+  totalChunks: number;
+  chunkSummaries: ChunkSummary[];
+  overallSummary: string;
+  middleChunksCount: number;
+  latency: number;
+  error?: string;
+}

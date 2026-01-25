@@ -62,9 +62,9 @@ export async function POST(request: NextRequest) {
     const uploadsDir = join(process.cwd(), '..', 'data', 'uploads');
     const filepath = join(uploadsDir, filename);
 
-    // Execute Python script with strategy parameter
+    // Execute Python script with action, question, and strategy parameters
     const escapedQuestion = question.replace(/"/g, '\\"').replace(/`/g, '\\`');
-    const command = `python3 "${pythonScript}" "${filepath}" "${escapedQuestion}" "${strategy}"`;
+    const command = `python3 "${pythonScript}" "${filepath}" "ask" "${escapedQuestion}" "${strategy}"`;
 
     try {
       const { stdout, stderr } = await execAsync(command, {
