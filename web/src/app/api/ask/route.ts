@@ -10,6 +10,7 @@ export type Strategy =
   | 'baseline'
   | 'attention_anchoring'
   | 'relevance_restructuring'
+  | 'query_aware_compression'
   | 'chunked_reading';
 
 interface AskRequest {
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
       'baseline',
       'attention_anchoring',
       'relevance_restructuring',
+      'query_aware_compression',
       'chunked_reading'
     ];
 

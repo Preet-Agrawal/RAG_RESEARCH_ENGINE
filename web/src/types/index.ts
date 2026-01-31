@@ -3,6 +3,7 @@ export type Strategy =
   | 'baseline'
   | 'attention_anchoring'
   | 'relevance_restructuring'
+  | 'query_aware_compression'
   | 'chunked_reading';
 
 export interface StrategyInfo {
@@ -28,6 +29,11 @@ export const STRATEGIES: StrategyInfo[] = [
     id: 'relevance_restructuring',
     name: 'Relevance Restructuring',
     description: 'Reorganizes content to place relevant sections at document edges',
+  },
+  {
+    id: 'query_aware_compression',
+    name: 'Query-Aware Compression',
+    description: 'Compresses irrelevant content, expands relevant content at attention-rich positions',
   },
   {
     id: 'chunked_reading',
@@ -90,5 +96,53 @@ export interface SummarizeResponse {
   overallSummary: string;
   middleChunksCount: number;
   latency: number;
+  error?: string;
+}
+
+// Strategy Comparison Types
+export interface StrategyComparisonResult {
+  strategy: string;
+  answer: string;
+  confidence: number;
+  latency: number;
+  chunksProcessed: number;
+  explanation: string;
+}
+
+export interface CompareResponse {
+  success: boolean;
+  question: string;
+  comparison: StrategyComparisonResult[];
+  bestStrategy: string;
+  totalLatency: number;
+  error?: string;
+}
+
+// Benchmark Types
+export interface BenchmarkPositionResult {
+  positionPercent: number;
+  positionZone: 'beginning' | 'middle' | 'end';
+  baselineFound: boolean;
+  baselineConfidence: number;
+  combinedFound: boolean;
+  combinedConfidence: number;
+  recoverySuccess: boolean;
+}
+
+export interface BenchmarkSummary {
+  baselineAccuracy: number;
+  combinedAccuracy: number;
+  improvement: number;
+  deadZonePositions: number[];
+  deadZoneRecoveryRate: number;
+}
+
+export interface BenchmarkResponse {
+  success: boolean;
+  needleFact: string;
+  testPositions: number[];
+  results: BenchmarkPositionResult[];
+  summary: BenchmarkSummary;
+  totalLatency: number;
   error?: string;
 }

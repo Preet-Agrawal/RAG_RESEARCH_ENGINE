@@ -101,19 +101,63 @@ class MiddleRecoveryProcessor:
 
         return "\n".join(parts)
 
+    def _compute_relevance_score(self, query: str, text: str) -> float:
+        """
+        Compute relevance score using multiple signals:
+        - Exact keyword matches
+        - Partial word matches (for variations)
+        - Phrase proximity bonus
+        """
+        import re
+
+        query_lower = query.lower()
+        text_lower = text.lower()
+
+        # Extract query words (remove common stopwords)
+        stopwords = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+                     'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+                     'should', 'may', 'might', 'must', 'shall', 'can', 'of', 'to', 'in',
+                     'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through',
+                     'during', 'before', 'after', 'above', 'below', 'between', 'under',
+                     'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where',
+                     'why', 'how', 'all', 'each', 'few', 'more', 'most', 'other', 'some',
+                     'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than',
+                     'too', 'very', 'just', 'and', 'but', 'if', 'or', 'because', 'until',
+                     'while', 'what', 'which', 'who', 'this', 'that', 'these', 'those'}
+
+        query_words = [w for w in re.findall(r'\w+', query_lower) if w not in stopwords and len(w) > 2]
+
+        if not query_words:
+            return 0.0
+
+        score = 0.0
+
+        # Exact word matches (highest weight)
+        for word in query_words:
+            if re.search(r'\b' + re.escape(word) + r'\b', text_lower):
+                score += 3.0
+            # Partial match (word stem appears)
+            elif len(word) > 4 and word[:4] in text_lower:
+                score += 1.0
+
+        # Bonus for multiple query words appearing close together
+        words_found = sum(1 for w in query_words if w in text_lower)
+        if words_found >= 2:
+            score += words_found * 0.5
+
+        # Normalize by query length
+        max_possible = len(query_words) * 4.0
+        return min(score / max_possible, 1.0) if max_possible > 0 else 0.0
+
     def apply_relevance_restructuring(self, chunks: List[TextChunk], query: str) -> str:
         """
         Restructure chunks to place likely-relevant content at edges (start/end).
         Less relevant content goes to the middle where attention is lower.
         """
-        # Score relevance using keyword overlap
-        query_words = set(query.lower().split())
-
+        # Score relevance using improved keyword matching
         scored_chunks = []
         for chunk in chunks:
-            chunk_words = set(chunk.content.lower().split())
-            overlap = len(query_words & chunk_words)
-            score = overlap / len(chunk_words) if chunk_words else 0
+            score = self._compute_relevance_score(query, chunk.content)
             scored_chunks.append((chunk, score))
 
         # Sort by relevance (descending)
@@ -162,7 +206,7 @@ If relevant information is found, state it clearly. If not, say "No relevant inf
 
 Relevant information:"""
 
-            response = self.llm_client.generate(extraction_prompt, max_tokens=500)
+            response = self.llm_client.generate(extraction_prompt, max_tokens=1000)
             info = response.text.strip()
 
             if info and "no relevant information" not in info.lower():
@@ -173,6 +217,76 @@ Relevant information:"""
 
         return "\n\n".join(extracted_info)
 
+    def apply_query_aware_compression(self, chunks: List[TextChunk], query: str) -> str:
+        """
+        Query-Aware Compression (Approach 4 from research):
+        - Compress/summarize irrelevant chunks to save tokens
+        - Keep relevant chunks in full
+        - Place full chunks at attention-rich positions (edges)
+        """
+        # Score all chunks for relevance
+        scored_chunks = []
+        for chunk in chunks:
+            score = self._compute_relevance_score(query, chunk.content)
+            scored_chunks.append((chunk, score))
+
+        # Determine threshold for "relevant" (top 40%)
+        scores = [s for _, s in scored_chunks]
+        if scores:
+            threshold = sorted(scores, reverse=True)[min(len(scores) - 1, len(scores) * 2 // 5)]
+        else:
+            threshold = 0.5
+
+        # Separate into relevant (keep full) and less relevant (compress)
+        relevant_chunks = [(c, s) for c, s in scored_chunks if s >= threshold]
+        less_relevant_chunks = [(c, s) for c, s in scored_chunks if s < threshold]
+
+        # Compress less relevant chunks
+        compressed_summaries = []
+        if less_relevant_chunks:
+            # Batch compress for efficiency
+            batch_size = 5
+            for i in range(0, len(less_relevant_chunks), batch_size):
+                batch = less_relevant_chunks[i:i + batch_size]
+                batch_text = "\n\n".join([f"[Section at {int(c.position*100)}%]: {c.content[:500]}" for c, _ in batch])
+
+                compress_prompt = f"""Compress these document sections into brief summaries (1-2 sentences each).
+Keep any information that might relate to: {query}
+
+{batch_text}
+
+Compressed summaries:"""
+
+                response = self.llm_client.generate(compress_prompt, max_tokens=400)
+                compressed_summaries.append(response.text.strip())
+
+        # Build final context: relevant at edges, compressed in middle
+        parts = []
+        parts.append(f"QUERY: {query}")
+        parts.append("=" * 60)
+        parts.append("\n[HIGH RELEVANCE SECTIONS - FULL TEXT]\n")
+
+        # Add relevant chunks at start
+        for i, (chunk, score) in enumerate(relevant_chunks[:len(relevant_chunks)//2 + 1]):
+            parts.append(f"\n--- RELEVANT SECTION (Position: {int(chunk.position*100)}%, Score: {score:.2f}) ---")
+            parts.append(chunk.content)
+
+        # Add compressed middle
+        if compressed_summaries:
+            parts.append("\n\n[COMPRESSED BACKGROUND SECTIONS]\n")
+            parts.append("\n".join(compressed_summaries))
+
+        # Add remaining relevant chunks at end
+        parts.append("\n\n[MORE RELEVANT SECTIONS]\n")
+        for chunk, score in relevant_chunks[len(relevant_chunks)//2 + 1:]:
+            parts.append(f"\n--- RELEVANT SECTION (Position: {int(chunk.position*100)}%, Score: {score:.2f}) ---")
+            parts.append(chunk.content)
+
+        parts.append("\n" + "=" * 60)
+        parts.append(f"Answer the question using the relevant sections above: {query}")
+
+        return "\n".join(parts)
+
     def apply_combined_strategy(self, chunks: List[TextChunk], query: str) -> str:
         """
         Combines multiple strategies for best middle content recovery:
@@ -180,14 +294,10 @@ Relevant information:"""
         2. Attention anchoring with section markers
         3. Question injection throughout
         """
-        # Score and partially restructure
-        query_words = set(query.lower().split())
-
+        # Score using improved relevance computation
         scored_chunks = []
         for chunk in chunks:
-            chunk_words = set(chunk.content.lower().split())
-            overlap = len(query_words & chunk_words)
-            score = overlap / len(chunk_words) if chunk_words else 0
+            score = self._compute_relevance_score(query, chunk.content)
             scored_chunks.append((chunk, score))
 
         # Sort: highest relevance first, then by original position
@@ -224,25 +334,48 @@ Relevant information:"""
 
     def get_system_prompt(self, strategy: str) -> str:
         """Get appropriate system prompt for the strategy."""
+        detail_instruction = """
+
+RESPONSE QUALITY REQUIREMENTS:
+- Provide DETAILED, COMPREHENSIVE answers with specific facts, numbers, and examples from the document
+- Include ALL relevant information found, not just a summary
+- Quote or paraphrase specific passages when helpful
+- If multiple relevant points exist, list them all
+- Structure longer answers with clear organization
+- Never give vague or one-sentence answers when more detail is available"""
+
         prompts = {
-            "baseline": "You are a helpful assistant. Answer questions based on the provided document content.",
+            "baseline": f"""You are an expert research assistant. Answer questions based on the provided document content.
+{detail_instruction}""",
 
-            "attention_anchoring": """You are a helpful assistant analyzing a document. CRITICAL INSTRUCTIONS:
-1. Read ALL sections from beginning to END
-2. Pay EQUAL attention to MIDDLE sections - they are just as important
-3. The answer might be ANYWHERE in the document
-4. Before answering, mentally confirm you read the middle sections carefully""",
+            "attention_anchoring": f"""You are an expert research assistant analyzing a document. CRITICAL INSTRUCTIONS:
+1. Read ALL sections from beginning to END with equal attention
+2. Pay SPECIAL attention to MIDDLE sections - they often contain crucial details
+3. The answer might be ANYWHERE in the document - scan thoroughly
+4. Before answering, mentally confirm you checked the middle sections carefully
+5. Extract ALL relevant details, not just the first match you find
+{detail_instruction}""",
 
-            "relevance_restructuring": """You are a helpful assistant. The document sections have been reorganized with potentially relevant content near the start and end. However, CHECK ALL SECTIONS as relevant information may still be elsewhere.""",
+            "relevance_restructuring": f"""You are an expert research assistant. The document sections have been reorganized with potentially relevant content near the start and end. However, CHECK ALL SECTIONS thoroughly as relevant information may still be elsewhere.
+{detail_instruction}""",
 
-            "chunked_reading": """You are a helpful assistant. You will receive extracted information from different parts of a document. Synthesize this information to provide a complete answer.""",
+            "chunked_reading": f"""You are an expert research assistant. You will receive extracted information from different parts of a document. Synthesize ALL this information to provide a complete, detailed answer. Do not omit any relevant details.
+{detail_instruction}""",
 
-            "combined": """You are a research assistant designed to overcome the "Lost in the Middle" problem.
+            "combined": f"""You are an expert research assistant designed to overcome the "Lost in the Middle" problem.
 CRITICAL: LLMs tend to ignore middle content. To counter this:
-1. Read EVERY section with equal attention
-2. Sections marked [POTENTIALLY RELEVANT] may contain the answer
+1. Read EVERY section with equal attention - middle sections are just as important
+2. Sections marked [POTENTIALLY RELEVANT] may contain the answer, but check ALL sections
 3. Check middle sections TWICE before answering
-4. If unsure, review the middle sections again"""
+4. Extract and include ALL relevant details from every part of the document
+5. If multiple pieces of information are relevant, include them all
+{detail_instruction}""",
+
+            "query_aware_compression": f"""You are an expert research assistant. You are given a document where:
+- HIGH RELEVANCE sections contain full text most likely to answer the question
+- COMPRESSED sections contain summarized background information
+- Focus primarily on the RELEVANT sections but check compressed sections for additional context
+{detail_instruction}"""
         }
         return prompts.get(strategy, prompts["baseline"])
 
@@ -258,8 +391,8 @@ def summarize_document(pdf_text: str) -> Dict[str, Any]:
     try:
         client = LLMClient(
             provider="groq",
-            model="llama-3.1-8b-instant",
-            temperature=0.0,
+            model="llama-3.3-70b-versatile",
+            temperature=0.1,
             api_key=os.getenv("GROQ_API_KEY")
         )
 
@@ -298,7 +431,7 @@ Section {i+1}/{num_chunks}:
 
 Provide a concise summary (1-2 sentences):"""
 
-            response = client.generate(prompt, max_tokens=150)
+            response = client.generate(prompt, max_tokens=300)
 
             chunk_summaries.append({
                 "chunk_id": i + 1,
@@ -319,7 +452,7 @@ Pay SPECIAL attention to the MIDDLE sections as they contain important informati
 
 Overall document summary (3-4 sentences covering key points from ALL sections including the middle):"""
 
-        overall_response = client.generate(overall_prompt, max_tokens=300)
+        overall_response = client.generate(overall_prompt, max_tokens=600)
 
         return {
             "success": True,
@@ -357,7 +490,40 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         return f"Error extracting PDF: {str(e)}"
 
 
-def answer_question(pdf_text: str, question: str, strategy: str = "combined") -> Dict[str, Any]:
+def get_llm_client(provider: str = "groq", model: str = None) -> LLMClient:
+    """
+    Get LLM client for specified provider.
+    Supports: groq, openai, anthropic
+    """
+    provider_configs = {
+        "groq": {
+            "model": model or "llama-3.3-70b-versatile",
+            "api_key": os.getenv("GROQ_API_KEY"),
+            "provider": "groq"
+        },
+        "openai": {
+            "model": model or "gpt-4o",
+            "api_key": os.getenv("OPENAI_API_KEY"),
+            "provider": "openai"
+        },
+        "anthropic": {
+            "model": model or "claude-sonnet-4-20250514",
+            "api_key": os.getenv("ANTHROPIC_API_KEY"),
+            "provider": "anthropic"
+        }
+    }
+
+    config = provider_configs.get(provider, provider_configs["groq"])
+    return LLMClient(
+        provider=config["provider"],
+        model=config["model"],
+        temperature=0.1,
+        api_key=config["api_key"]
+    )
+
+
+def answer_question(pdf_text: str, question: str, strategy: str = "combined",
+                    provider: str = "groq", model: str = None) -> Dict[str, Any]:
     """
     Answer question using RAG with Lost-in-the-Middle recovery strategies.
 
@@ -365,20 +531,18 @@ def answer_question(pdf_text: str, question: str, strategy: str = "combined") ->
     - baseline: Standard approach (prone to missing middle content)
     - attention_anchoring: Uses markers and instructions to force attention
     - relevance_restructuring: Places relevant content at edges
+    - query_aware_compression: Compresses irrelevant, expands relevant at edges
     - chunked_reading: Processes document in smaller chunks
     - combined: Uses all strategies together (recommended)
+
+    Providers: groq (default), openai, anthropic
     """
     import time
     start_time = time.time()
 
     try:
-        # Initialize Groq client
-        client = LLMClient(
-            provider="groq",
-            model="llama-3.1-8b-instant",
-            temperature=0.0,
-            api_key=os.getenv("GROQ_API_KEY")
-        )
+        # Initialize client based on provider
+        client = get_llm_client(provider, model)
 
         processor = MiddleRecoveryProcessor(client)
 
@@ -398,6 +562,10 @@ def answer_question(pdf_text: str, question: str, strategy: str = "combined") ->
         elif strategy == "relevance_restructuring":
             context = processor.apply_relevance_restructuring(chunks, question)
             system_prompt = processor.get_system_prompt("relevance_restructuring")
+
+        elif strategy == "query_aware_compression":
+            context = processor.apply_query_aware_compression(chunks, question)
+            system_prompt = processor.get_system_prompt("query_aware_compression")
 
         elif strategy == "chunked_reading":
             # This strategy extracts info first, then synthesizes
@@ -433,20 +601,26 @@ Provide a clear, complete answer:"""
             context = processor.apply_combined_strategy(chunks, question)
             system_prompt = processor.get_system_prompt("combined")
 
-        # Limit context size for API
-        if len(context) > 12000:
-            context = context[:12000] + "\n\n[Document truncated for processing...]"
+        # Limit context size for API (increased for better coverage)
+        if len(context) > 24000:
+            context = context[:24000] + "\n\n[Document truncated for processing...]"
 
         # Create prompt
         prompt = f"""{context}
 
 ---
-Answer the question based ONLY on the document content above.
-If the answer is not in the document, say "The document does not contain information to answer this question."
+Based ONLY on the document content above, provide a DETAILED and COMPREHENSIVE answer to the question.
+
+IMPORTANT:
+- Include ALL relevant information, facts, numbers, and specific details found in the document
+- If multiple relevant points exist, list and explain each one
+- Quote or reference specific passages when helpful
+- Structure your answer clearly if it contains multiple parts
+- If the answer is not in the document, say "The document does not contain information to answer this question."
 
 Question: {question}
 
-Answer:"""
+Detailed Answer:"""
 
         # Get response
         response = client.generate(prompt, system_prompt=system_prompt)
@@ -462,6 +636,7 @@ Answer:"""
             "baseline": "Standard processing without middle-content recovery",
             "attention_anchoring": "Used section markers and attention instructions to emphasize middle content",
             "relevance_restructuring": "Reorganized content to place relevant sections at document edges",
+            "query_aware_compression": "Compressed irrelevant content, expanded relevant content at attention-rich positions",
             "combined": "Applied multiple recovery strategies for best middle-content retrieval",
             "combined (fallback)": "Chunked reading found no relevant info, fell back to combined strategy"
         }
@@ -473,7 +648,9 @@ Answer:"""
             "strategy_used": strategy,
             "chunks_processed": len(chunks),
             "latency": time.time() - start_time,
-            "strategy_explanation": strategy_explanations.get(strategy, "")
+            "strategy_explanation": strategy_explanations.get(strategy, ""),
+            "model_used": client.model,
+            "provider": provider
         }
 
     except Exception as e:
@@ -484,8 +661,129 @@ Answer:"""
             "strategy_used": strategy,
             "chunks_processed": 0,
             "latency": time.time() - start_time,
-            "error": str(e)
+            "error": str(e),
+            "provider": provider
         }
+
+
+def compare_strategies(pdf_text: str, question: str) -> Dict[str, Any]:
+    """
+    Run all strategies on the same question and compare results.
+    This helps identify which strategy works best for different queries.
+    """
+    import time
+    start_time = time.time()
+
+    strategies = [
+        "baseline",
+        "attention_anchoring",
+        "relevance_restructuring",
+        "query_aware_compression",
+        "chunked_reading",
+        "combined"
+    ]
+
+    results = []
+    for strategy in strategies:
+        result = answer_question(pdf_text, question, strategy)
+        results.append({
+            "strategy": strategy,
+            "answer": result.get("answer", ""),
+            "confidence": result.get("confidence", 0),
+            "latency": result.get("latency", 0),
+            "chunks_processed": result.get("chunks_processed", 0),
+            "explanation": result.get("strategy_explanation", "")
+        })
+
+    # Rank by confidence
+    results.sort(key=lambda x: x["confidence"], reverse=True)
+
+    return {
+        "success": True,
+        "question": question,
+        "comparison": results,
+        "best_strategy": results[0]["strategy"] if results else None,
+        "total_latency": time.time() - start_time
+    }
+
+
+def run_needle_benchmark(pdf_text: str, needle_fact: str = None) -> Dict[str, Any]:
+    """
+    Run needle-in-haystack benchmark to map the attention dead zone.
+    Inserts a "needle" fact at various positions and tests retrieval.
+
+    This implements Experiment 1 from the research plan:
+    - Place needle at positions: 10%, 25%, 40%, 50%, 60%, 75%, 90%
+    - Measure accuracy at each position
+    - Generate U-shaped attention curve data
+    """
+    import time
+    import random
+    start_time = time.time()
+
+    # Default needle fact if none provided
+    if not needle_fact:
+        needle_fact = "The secret code for the research project is ALPHA-7749-OMEGA."
+
+    # Question to find the needle
+    needle_question = "What is the secret code for the research project?"
+
+    # Test positions (percentage through document)
+    test_positions = [0.10, 0.25, 0.40, 0.50, 0.60, 0.75, 0.90]
+
+    # Split document into words for insertion
+    words = pdf_text.split()
+    total_words = len(words)
+
+    results = []
+
+    for position in test_positions:
+        # Calculate insertion point
+        insert_idx = int(total_words * position)
+
+        # Create modified text with needle inserted
+        modified_words = words[:insert_idx] + [f"\n\n{needle_fact}\n\n"] + words[insert_idx:]
+        modified_text = " ".join(modified_words)
+
+        # Test with baseline (most susceptible to lost-in-middle)
+        baseline_result = answer_question(modified_text, needle_question, "baseline")
+        baseline_found = "7749" in baseline_result.get("answer", "") or "ALPHA" in baseline_result.get("answer", "")
+
+        # Test with combined (our best recovery strategy)
+        combined_result = answer_question(modified_text, needle_question, "combined")
+        combined_found = "7749" in combined_result.get("answer", "") or "ALPHA" in combined_result.get("answer", "")
+
+        results.append({
+            "position_percent": int(position * 100),
+            "position_zone": "beginning" if position < 0.33 else ("middle" if position < 0.67 else "end"),
+            "baseline_found": baseline_found,
+            "baseline_confidence": baseline_result.get("confidence", 0),
+            "combined_found": combined_found,
+            "combined_confidence": combined_result.get("confidence", 0),
+            "recovery_success": combined_found and not baseline_found
+        })
+
+    # Calculate summary statistics
+    baseline_accuracy = sum(1 for r in results if r["baseline_found"]) / len(results)
+    combined_accuracy = sum(1 for r in results if r["combined_found"]) / len(results)
+
+    # Identify dead zone (positions where baseline fails but combined succeeds)
+    dead_zone_positions = [r["position_percent"] for r in results if r["recovery_success"]]
+
+    return {
+        "success": True,
+        "needle_fact": needle_fact,
+        "test_positions": [int(p * 100) for p in test_positions],
+        "results": results,
+        "summary": {
+            "baseline_accuracy": round(baseline_accuracy * 100, 1),
+            "combined_accuracy": round(combined_accuracy * 100, 1),
+            "improvement": round((combined_accuracy - baseline_accuracy) * 100, 1),
+            "dead_zone_positions": dead_zone_positions,
+            "dead_zone_recovery_rate": len(dead_zone_positions) / max(1, sum(1 for r in results if not r["baseline_found"])) * 100 if any(not r["baseline_found"] for r in results) else 0
+        },
+        "total_latency": time.time() - start_time
+    }
 
 
 def main():
@@ -525,8 +823,19 @@ def main():
         question = sys.argv[3]
         strategy = sys.argv[4] if len(sys.argv) > 4 else "combined"
         result = answer_question(pdf_text, question, strategy)
+    elif action == "compare":
+        # Compare all strategies on the same question
+        if len(sys.argv) < 4:
+            print(json.dumps({"error": "Question required for 'compare' action"}))
+            sys.exit(1)
+        question = sys.argv[3]
+        result = compare_strategies(pdf_text, question)
+    elif action == "benchmark":
+        # Run needle-in-haystack benchmark
+        needle_fact = sys.argv[3] if len(sys.argv) > 3 else None
+        result = run_needle_benchmark(pdf_text, needle_fact)
     else:
-        print(json.dumps({"error": f"Unknown action: {action}"}))
+        print(json.dumps({"error": f"Unknown action: {action}. Valid actions: summarize, ask, compare, benchmark"}))
         sys.exit(1)
 
     # Output JSON result
