@@ -4,6 +4,7 @@ export type Strategy =
   | 'attention_anchoring'
   | 'relevance_restructuring'
   | 'query_aware_compression'
+  | 'query_aware_contextualization'
   | 'chunked_reading';
 
 export interface StrategyInfo {
@@ -34,6 +35,11 @@ export const STRATEGIES: StrategyInfo[] = [
     id: 'query_aware_compression',
     name: 'Query-Aware Compression',
     description: 'Compresses irrelevant content, expands relevant content at attention-rich positions',
+  },
+  {
+    id: 'query_aware_contextualization',
+    name: 'Query-Aware Contextualization',
+    description: 'Query before AND after documents (Liu et al. 2023 paper technique)',
   },
   {
     id: 'chunked_reading',

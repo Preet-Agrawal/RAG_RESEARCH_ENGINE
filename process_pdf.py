@@ -287,12 +287,45 @@ Compressed summaries:"""
 
         return "\n".join(parts)
 
+    def apply_query_aware_contextualization(self, chunks: List[TextChunk], query: str) -> str:
+        """
+        Query-Aware Contextualization (from Liu et al. 2023 paper):
+        Places the query BEFORE and AFTER the documents to enable
+        query-aware processing of all document positions.
+
+        Key finding: This dramatically improves key-value retrieval
+        and slightly improves multi-document QA for first positions.
+        """
+        parts = []
+
+        # Query BEFORE documents (enables query-aware contextualization)
+        parts.append(f"QUESTION TO ANSWER: {query}")
+        parts.append("\nRead all the following document sections to find the answer:\n")
+        parts.append("=" * 60)
+
+        # All document sections
+        for i, chunk in enumerate(chunks):
+            section_num = i + 1
+            position_pct = int(chunk.position * 100)
+            parts.append(f"\n[Document Section {section_num}/{len(chunks)} - Position: {position_pct}%]")
+            parts.append(chunk.content)
+
+        parts.append("\n" + "=" * 60)
+
+        # Query AFTER documents (standard position)
+        parts.append(f"\nBased on ALL the document sections above, answer this question:")
+        parts.append(f"QUESTION: {query}")
+        parts.append("\nProvide a detailed answer using information from any section:")
+
+        return "\n".join(parts)
+
     def apply_combined_strategy(self, chunks: List[TextChunk], query: str) -> str:
         """
         Combines multiple strategies for best middle content recovery:
-        1. Relevance-based restructuring
-        2. Attention anchoring with section markers
-        3. Question injection throughout
+        1. Query-aware contextualization (query before AND after)
+        2. Relevance-based restructuring
+        3. Attention anchoring with section markers
+        4. Question injection throughout
         """
         # Score using improved relevance computation
         scored_chunks = []
@@ -375,6 +408,13 @@ CRITICAL: LLMs tend to ignore middle content. To counter this:
 - HIGH RELEVANCE sections contain full text most likely to answer the question
 - COMPRESSED sections contain summarized background information
 - Focus primarily on the RELEVANT sections but check compressed sections for additional context
+{detail_instruction}""",
+
+            "query_aware_contextualization": f"""You are an expert research assistant. The question appears both BEFORE and AFTER the document sections.
+This is the "Query-Aware Contextualization" technique from Liu et al. (2023).
+- The question at the START helps you understand what to look for as you read
+- Read ALL sections with equal attention regardless of their position
+- The question at the END reminds you what to answer
 {detail_instruction}"""
         }
         return prompts.get(strategy, prompts["baseline"])
@@ -567,6 +607,11 @@ def answer_question(pdf_text: str, question: str, strategy: str = "combined",
             context = processor.apply_query_aware_compression(chunks, question)
             system_prompt = processor.get_system_prompt("query_aware_compression")
 
+        elif strategy == "query_aware_contextualization":
+            # From Liu et al. 2023 - query before AND after documents
+            context = processor.apply_query_aware_contextualization(chunks, question)
+            system_prompt = processor.get_system_prompt("query_aware_contextualization")
+
         elif strategy == "chunked_reading":
             # This strategy extracts info first, then synthesizes
             extracted = processor.apply_chunked_reading(chunks, question)
@@ -637,6 +682,7 @@ Detailed Answer:"""
             "attention_anchoring": "Used section markers and attention instructions to emphasize middle content",
             "relevance_restructuring": "Reorganized content to place relevant sections at document edges",
             "query_aware_compression": "Compressed irrelevant content, expanded relevant content at attention-rich positions",
+            "query_aware_contextualization": "Query placed before AND after documents (Liu et al. 2023 technique)",
             "combined": "Applied multiple recovery strategies for best middle-content retrieval",
             "combined (fallback)": "Chunked reading found no relevant info, fell back to combined strategy"
         }
@@ -679,6 +725,7 @@ def compare_strategies(pdf_text: str, question: str) -> Dict[str, Any]:
         "attention_anchoring",
         "relevance_restructuring",
         "query_aware_compression",
+        "query_aware_contextualization",
         "chunked_reading",
         "combined"
     ]
@@ -704,6 +751,179 @@ def compare_strategies(pdf_text: str, question: str) -> Dict[str, Any]:
         "comparison": results,
         "best_strategy": results[0]["strategy"] if results else None,
         "total_latency": time.time() - start_time
+    }
+
+
+def test_closed_book(question: str, provider: str = "groq") -> Dict[str, Any]:
+    """
+    Test closed-book performance (no documents provided).
+    From Liu et al. 2023: Used as baseline to compare with document-augmented performance.
+    """
+    import time
+    start_time = time.time()
+
+    try:
+        client = get_llm_client(provider)
+
+        prompt = f"""Answer the following question using only your knowledge.
+If you don't know the answer, say "I don't know."
+
+Question: {question}
+
+Answer:"""
+
+        response = client.generate(prompt, max_tokens=500)
+
+        return {
+            "success": True,
+            "answer": response.text.strip(),
+            "latency": time.time() - start_time,
+            "setting": "closed_book"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "latency": time.time() - start_time
+        }
+
+
+def test_oracle(pdf_text: str, question: str, provider: str = "groq") -> Dict[str, Any]:
+    """
+    Test oracle performance (single document that contains the answer).
+    From Liu et al. 2023: Best-case scenario for comparison.
+    """
+    import time
+    start_time = time.time()
+
+    try:
+        client = get_llm_client(provider)
+
+        # In oracle setting, we use the full document as it would contain the answer
+        prompt = f"""Read the following document and answer the question.
+
+Document:
+{pdf_text[:8000]}
+
+Question: {question}
+
+Answer based only on the document:"""
+
+        response = client.generate(prompt, max_tokens=1000)
+
+        return {
+            "success": True,
+            "answer": response.text.strip(),
+            "latency": time.time() - start_time,
+            "setting": "oracle"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "latency": time.time() - start_time
+        }
+
+
+def run_key_value_retrieval_test(num_pairs: int = 75, test_positions: List[float] = None) -> Dict[str, Any]:
+    """
+    Synthetic Key-Value Retrieval Task (Section 3 of Liu et al. 2023).
+
+    This is a minimal testbed for basic retrieval from input context.
+    - Uses JSON object with randomly-generated UUID key-value pairs
+    - Tests if model can retrieve the value for a specified key
+    - Measures performance at different positions in the context
+
+    From the paper: "Although some models perform the synthetic key-value
+    retrieval task perfectly, other models struggle, especially when contexts
+    have 140 or 300 key-value pairs."
+    """
+    import time
+    import uuid
+    start_time = time.time()
+
+    if test_positions is None:
+        # Test at beginning, middle positions, and end
+        test_positions = [0.05, 0.25, 0.40, 0.50, 0.60, 0.75, 0.95]
+
+    # Generate random key-value pairs
+    kv_pairs = {}
+    keys_list = []
+    for _ in range(num_pairs):
+        key = str(uuid.uuid4())
+        value = str(uuid.uuid4())
+        kv_pairs[key] = value
+        keys_list.append(key)
+
+    results = []
+
+    for position in test_positions:
+        # Get the key at this position
+        key_idx = int(len(keys_list) * position)
+        key_idx = min(key_idx, len(keys_list) - 1)
+        target_key = keys_list[key_idx]
+        expected_value = kv_pairs[target_key]
+
+        # Create the JSON string
+        json_str = json.dumps(kv_pairs, indent=2)
+
+        # Create the prompt (from the paper's Figure 6)
+        prompt = f"""Extract the value corresponding to the specified key in the JSON object below.
+
+JSON data:
+{json_str}
+
+Key: "{target_key}"
+
+Corresponding value:"""
+
+        try:
+            client = get_llm_client("groq")
+            response = client.generate(prompt, max_tokens=100)
+            answer = response.text.strip()
+
+            # Check if the correct value appears in the response
+            found = expected_value in answer or expected_value[:8] in answer
+
+            results.append({
+                "position_percent": int(position * 100),
+                "position_zone": "beginning" if position < 0.33 else ("middle" if position < 0.67 else "end"),
+                "key_position": key_idx + 1,
+                "found": found,
+                "expected_value": expected_value[:16] + "...",
+                "got_value": answer[:50] if answer else "(empty)"
+            })
+        except Exception as e:
+            results.append({
+                "position_percent": int(position * 100),
+                "position_zone": "beginning" if position < 0.33 else ("middle" if position < 0.67 else "end"),
+                "key_position": key_idx + 1,
+                "found": False,
+                "error": str(e)
+            })
+
+    # Calculate accuracy
+    accuracy = sum(1 for r in results if r.get("found", False)) / len(results) if results else 0
+
+    # Identify which zones had failures
+    failed_zones = [r["position_zone"] for r in results if not r.get("found", False)]
+    middle_failures = sum(1 for z in failed_zones if z == "middle")
+
+    return {
+        "success": True,
+        "task": "key_value_retrieval",
+        "num_pairs": num_pairs,
+        "test_positions": [int(p * 100) for p in test_positions],
+        "results": results,
+        "summary": {
+            "accuracy": round(accuracy * 100, 1),
+            "total_tests": len(results),
+            "found_count": sum(1 for r in results if r.get("found", False)),
+            "middle_failure_count": middle_failures,
+            "u_shaped_pattern": middle_failures > 0 and results[0].get("found", False) and results[-1].get("found", False)
+        },
+        "total_latency": time.time() - start_time,
+        "paper_reference": "Section 3: Key-Value Retrieval (Liu et al. 2023)"
     }
 
 
@@ -834,8 +1054,12 @@ def main():
         # Run needle-in-haystack benchmark
         needle_fact = sys.argv[3] if len(sys.argv) > 3 else None
         result = run_needle_benchmark(pdf_text, needle_fact)
+    elif action == "kv_retrieval":
+        # Run synthetic key-value retrieval test (Section 3 of Liu et al. 2023)
+        num_pairs = int(sys.argv[3]) if len(sys.argv) > 3 else 75
+        result = run_key_value_retrieval_test(num_pairs)
     else:
-        print(json.dumps({"error": f"Unknown action: {action}. Valid actions: summarize, ask, compare, benchmark"}))
+        print(json.dumps({"error": f"Unknown action: {action}. Valid actions: summarize, ask, compare, benchmark, kv_retrieval"}))
         sys.exit(1)
 
     # Output JSON result
