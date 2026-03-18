@@ -22,11 +22,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const pythonScript = join(process.cwd(), '..', 'process_pdf.py');
-    const uploadsDir = join(process.cwd(), '..', 'data', 'uploads');
+    const projectRoot = join(process.cwd(), '..');
+    const pythonScript = join(projectRoot, 'process_pdf.py');
+    const pythonBin = join(projectRoot, 'venv', 'bin', 'python3');
+    const uploadsDir = join(projectRoot, 'data', 'uploads');
     const filepath = join(uploadsDir, filename);
 
-    let command = `python3 "${pythonScript}" "${filepath}" "benchmark"`;
+    let command = `"${pythonBin}" "${pythonScript}" "${filepath}" "benchmark"`;
     if (needleFact) {
       const escapedNeedle = needleFact.replace(/"/g, '\\"').replace(/`/g, '\\`');
       command += ` "${escapedNeedle}"`;

@@ -8,21 +8,74 @@
   }
 
   * {
-    @apply scrollbar-thin scrollbar-thumb-claude-border scrollbar-track-transparent;
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a3a transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #3a3a3a;
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #4a4a4a;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 
 @layer utilities {
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  .typing-dot {
+    @apply w-2 h-2 rounded-full bg-claude-accent;
+    animation: pulse-dot 1.4s infinite ease-in-out both;
   }
 
-  .scrollbar-thumb-claude-border::-webkit-scrollbar-thumb {
-    @apply bg-claude-border rounded-full;
+  .typing-dot:nth-child(1) {
+    animation-delay: -0.32s;
   }
 
-  .scrollbar-track-transparent::-webkit-scrollbar-track {
-    @apply bg-transparent;
+  .typing-dot:nth-child(2) {
+    animation-delay: -0.16s;
   }
+
+  .typing-dot:nth-child(3) {
+    animation-delay: 0s;
+  }
+}
+
+/* Smooth transitions for sidebar */
+.sidebar-transition {
+  transition: width 0.2s ease, opacity 0.15s ease;
+}
+
+/* Message content formatting */
+.message-content p {
+  margin-bottom: 0.75rem;
+}
+.message-content p:last-child {
+  margin-bottom: 0;
+}
+.message-content strong {
+  font-weight: 600;
+  color: #ececec;
+}
+.message-content ul, .message-content ol {
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+.message-content li {
+  margin-bottom: 0.25rem;
+}
+
+/* Select styling */
+select option {
+  background-color: #212121;
+  color: #ececec;
 }

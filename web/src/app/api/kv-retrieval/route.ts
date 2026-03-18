@@ -15,10 +15,12 @@ export async function POST(request: NextRequest) {
     const { numPairs = 75 } = body;
 
     // We need a dummy file path since the script expects one, but kv_retrieval doesn't use it
-    const pythonScript = join(process.cwd(), '..', 'process_pdf.py');
-    const dummyPath = join(process.cwd(), '..', 'README.md'); // Use any existing file
+    const projectRoot = join(process.cwd(), '..');
+    const pythonScript = join(projectRoot, 'process_pdf.py');
+    const pythonBin = join(projectRoot, 'venv', 'bin', 'python3');
+    const dummyPath = join(projectRoot, 'README.md'); // Use any existing file
 
-    const command = `python3 "${pythonScript}" "${dummyPath}" "kv_retrieval" "${numPairs}"`;
+    const command = `"${pythonBin}" "${pythonScript}" "${dummyPath}" "kv_retrieval" "${numPairs}"`;
 
     try {
       const { stdout, stderr } = await execAsync(command, {

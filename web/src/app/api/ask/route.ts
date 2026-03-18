@@ -62,13 +62,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Path to the Python script that processes PDF with middle-recovery strategies
-    const pythonScript = join(process.cwd(), '..', 'process_pdf.py');
-    const uploadsDir = join(process.cwd(), '..', 'data', 'uploads');
+    const projectRoot = join(process.cwd(), '..');
+    const pythonScript = join(projectRoot, 'process_pdf.py');
+    const pythonBin = join(projectRoot, 'venv', 'bin', 'python3');
+    const uploadsDir = join(projectRoot, 'data', 'uploads');
     const filepath = join(uploadsDir, filename);
 
     // Execute Python script with action, question, and strategy parameters
     const escapedQuestion = question.replace(/"/g, '\\"').replace(/`/g, '\\`');
-    const command = `python3 "${pythonScript}" "${filepath}" "ask" "${escapedQuestion}" "${strategy}"`;
+    const command = `"${pythonBin}" "${pythonScript}" "${filepath}" "ask" "${escapedQuestion}" "${strategy}"`;
 
     try {
       const { stdout, stderr } = await execAsync(command, {

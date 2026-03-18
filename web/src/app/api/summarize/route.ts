@@ -40,11 +40,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const pythonScript = join(process.cwd(), '..', 'process_pdf.py');
-    const uploadsDir = join(process.cwd(), '..', 'data', 'uploads');
+    const projectRoot = join(process.cwd(), '..');
+    const pythonScript = join(projectRoot, 'process_pdf.py');
+    const pythonBin = join(projectRoot, 'venv', 'bin', 'python3');
+    const uploadsDir = join(projectRoot, 'data', 'uploads');
     const filepath = join(uploadsDir, filename);
 
-    const command = `python3 "${pythonScript}" "${filepath}" "summarize"`;
+    const command = `"${pythonBin}" "${pythonScript}" "${filepath}" "summarize"`;
 
     try {
       const { stdout, stderr } = await execAsync(command, {

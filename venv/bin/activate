@@ -35,7 +35,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV=/Users/manojkumawat/r/RAG_RESEARCH_ENGINE/venv
+VIRTUAL_ENV=/Users/manojkumawat/sd/RAG_RESEARCH_ENGINE/venv
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
