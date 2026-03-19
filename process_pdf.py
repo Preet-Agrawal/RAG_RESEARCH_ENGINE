@@ -365,6 +365,117 @@ Compressed summaries:"""
 
         return "\n".join(parts)
 
+    def apply_reranking(self, chunks: List[TextChunk], query: str) -> str:
+        """
+        Reranking Prompt: Place most relevant docs first and last.
+        Strategic placement exploits primacy and recency bias in LLMs.
+        """
+        # Score all chunks
+        scored_chunks = []
+        for chunk in chunks:
+            score = self._compute_relevance_score(query, chunk.content)
+            scored_chunks.append((chunk, score))
+
+        # Sort by relevance descending
+        scored_chunks.sort(key=lambda x: x[1], reverse=True)
+
+        # Rerank: most relevant at start, second most relevant at end, least relevant in middle
+        reranked = []
+        for i, (chunk, score) in enumerate(scored_chunks):
+            if i % 2 == 0:
+                reranked.insert(len(reranked) // 2 if i > 0 else 0, (chunk, score))
+            else:
+                reranked.append((chunk, score))
+
+        # Actually do proper first/last placement:
+        # Top half goes to edges (alternating start/end), bottom half fills middle
+        sorted_by_relevance = sorted(scored_chunks, key=lambda x: x[1], reverse=True)
+        n = len(sorted_by_relevance)
+        result = [None] * n
+        left, right = 0, n - 1
+        for i, item in enumerate(sorted_by_relevance):
+            if i % 2 == 0:
+                result[left] = item
+                left += 1
+            else:
+                result[right] = item
+                right -= 1
+
+        parts = []
+        parts.append(f"You are a helpful assistant. Answer the question using ONLY the provided context.")
+        parts.append(f"\nIMPORTANT: Pay equal attention to ALL context passages below, regardless of their position.\n")
+        parts.append(f"Context (ordered by relevance):")
+
+        for i, (chunk, score) in enumerate(result):
+            parts.append(f"\n---\n[Passage {i+1}]")
+            parts.append(chunk.content)
+
+        parts.append(f"\n---\n")
+        parts.append(f"Question: {query}")
+        parts.append(f"\nBefore answering, identify which specific passages contain relevant information by quoting them. Then synthesize your answer.")
+
+        return "\n".join(parts)
+
+    def apply_chunk_by_chunk_reasoning(self, chunks: List[TextChunk], query: str) -> str:
+        """
+        Chunk-by-Chunk Reasoning: Force per-chunk evaluation before synthesis.
+        The model must evaluate EACH passage individually, then combine insights.
+        """
+        parts = []
+        parts.append(f"Given the following {len(chunks)} retrieved passages, answer the user's question.\n")
+        parts.append("Passages:")
+
+        for i, chunk in enumerate(chunks):
+            parts.append(f"\n[Passage {i+1}] (Position: {int(chunk.position * 100)}% through document)")
+            parts.append(chunk.content)
+
+        parts.append(f"\n{'=' * 50}")
+        parts.append("Instructions:")
+        parts.append("1. First, evaluate EACH passage individually and note if it's relevant to the question.")
+        parts.append("2. Then, combine insights from ALL relevant passages.")
+        parts.append("3. Cite passage numbers in your answer (e.g., [Passage 3]).")
+        parts.append(f"\nQuestion: {query}")
+
+        return "\n".join(parts)
+
+    def apply_map_reduce(self, chunks: List[TextChunk], query: str) -> str:
+        """
+        Map-Reduce Style: Extract relevant facts per chunk (map), then combine (reduce).
+        This is the most thorough approach for large documents.
+        Returns None to signal that answer_question should handle the two-phase flow.
+        """
+        # MAP phase: extract facts from each chunk
+        all_facts = []
+        batch_size = 4
+
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+            batch_text = "\n\n".join([
+                f"[Passage {i + j + 1}]: {c.content}"
+                for j, c in enumerate(batch)
+            ])
+
+            map_prompt = f"""Given these passages, extract any facts relevant to: "{query}"
+
+{batch_text}
+
+For each passage, write relevant facts or "NONE". Be specific and include numbers, names, and details.
+
+Relevant facts:"""
+
+            response = self.llm_client.generate(map_prompt, max_tokens=800)
+            extracted = response.text.strip()
+
+            if extracted and "none" not in extracted.lower()[:20]:
+                all_facts.append(f"From passages {i+1}-{min(i+batch_size, len(chunks))}:\n{extracted}")
+
+        if not all_facts:
+            return None  # Signal to fallback
+
+        # REDUCE phase: combine all extracted facts
+        aggregated = "\n\n".join(all_facts)
+        return aggregated
+
     def get_system_prompt(self, strategy: str) -> str:
         """Get appropriate system prompt for the strategy."""
         detail_instruction = """
@@ -415,6 +526,33 @@ This is the "Query-Aware Contextualization" technique from Liu et al. (2023).
 - The question at the START helps you understand what to look for as you read
 - Read ALL sections with equal attention regardless of their position
 - The question at the END reminds you what to answer
+{detail_instruction}""",
+
+            "reranking": f"""You are a helpful assistant that answers questions using ONLY the provided context passages.
+CRITICAL INSTRUCTIONS:
+- Pay EQUAL attention to ALL passages regardless of their position
+- The passages have been strategically ordered with the most relevant at the start and end
+- Before answering, identify which specific passages contain relevant information
+- Quote or cite the passage numbers when referencing information
+- Synthesize information from multiple passages when applicable
+{detail_instruction}""",
+
+            "chunk_by_chunk_reasoning": f"""You are an expert research assistant that uses structured reasoning.
+CRITICAL INSTRUCTIONS:
+1. You MUST evaluate EACH passage individually first - state whether it is relevant or not
+2. For relevant passages, extract the key facts
+3. Then synthesize your final answer from ALL relevant passages
+4. Always cite passage numbers in your answer (e.g., [Passage 3])
+5. Do NOT skip any passage - evaluate every single one
+{detail_instruction}""",
+
+            "map_reduce": f"""You are an expert research assistant performing the REDUCE step of a map-reduce analysis.
+You are given extracted facts from different parts of a document. Your job is to:
+1. Review ALL the extracted facts carefully
+2. Identify the most relevant and important information
+3. Combine and synthesize the facts into a comprehensive answer
+4. Resolve any contradictions between different sections
+5. Include specific details, numbers, and names from the facts
 {detail_instruction}"""
         }
         return prompts.get(strategy, prompts["baseline"])
@@ -612,6 +750,41 @@ def answer_question(pdf_text: str, question: str, strategy: str = "combined",
             context = processor.apply_query_aware_contextualization(chunks, question)
             system_prompt = processor.get_system_prompt("query_aware_contextualization")
 
+        elif strategy == "reranking":
+            context = processor.apply_reranking(chunks, question)
+            system_prompt = processor.get_system_prompt("reranking")
+
+        elif strategy == "chunk_by_chunk_reasoning":
+            context = processor.apply_chunk_by_chunk_reasoning(chunks, question)
+            system_prompt = processor.get_system_prompt("chunk_by_chunk_reasoning")
+
+        elif strategy == "map_reduce":
+            # Two-phase: map (extract per chunk) then reduce (synthesize)
+            extracted_facts = processor.apply_map_reduce(chunks, question)
+            if extracted_facts:
+                reduce_prompt = f"""Using ONLY these extracted facts from a document, answer the question: "{question}"
+
+Extracted Facts:
+{extracted_facts}
+
+Provide a detailed, comprehensive answer. Synthesize information from all the extracted facts:"""
+
+                response = client.generate(reduce_prompt, system_prompt=processor.get_system_prompt("map_reduce"))
+
+                return {
+                    "answer": response.text,
+                    "sources": ["PDF Document"],
+                    "confidence": 0.92,
+                    "strategy_used": strategy,
+                    "chunks_processed": len(chunks),
+                    "latency": time.time() - start_time,
+                    "strategy_explanation": "Map-Reduce: extracted facts per chunk, then synthesized final answer"
+                }
+            else:
+                context = processor.apply_combined_strategy(chunks, question)
+                system_prompt = processor.get_system_prompt("combined")
+                strategy = "combined (fallback from map_reduce)"
+
         elif strategy == "chunked_reading":
             # This strategy extracts info first, then synthesizes
             extracted = processor.apply_chunked_reading(chunks, question)
@@ -684,7 +857,11 @@ Detailed Answer:"""
             "query_aware_compression": "Compressed irrelevant content, expanded relevant content at attention-rich positions",
             "query_aware_contextualization": "Query placed before AND after documents (Liu et al. 2023 technique)",
             "combined": "Applied multiple recovery strategies for best middle-content retrieval",
-            "combined (fallback)": "Chunked reading found no relevant info, fell back to combined strategy"
+            "combined (fallback)": "Chunked reading found no relevant info, fell back to combined strategy",
+            "combined (fallback from map_reduce)": "Map-reduce found no relevant facts, fell back to combined strategy",
+            "reranking": "Reranked chunks with most relevant at start and end, explicit equal-attention instructions",
+            "chunk_by_chunk_reasoning": "Per-passage evaluation with citation, then synthesis from all relevant passages",
+            "map_reduce": "Map-Reduce: extracted facts per chunk, then synthesized final answer"
         }
 
         return {

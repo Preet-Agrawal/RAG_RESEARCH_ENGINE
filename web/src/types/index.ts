@@ -5,7 +5,10 @@ export type Strategy =
   | 'relevance_restructuring'
   | 'query_aware_compression'
   | 'query_aware_contextualization'
-  | 'chunked_reading';
+  | 'chunked_reading'
+  | 'reranking'
+  | 'chunk_by_chunk_reasoning'
+  | 'map_reduce';
 
 export interface StrategyInfo {
   id: Strategy;
@@ -20,6 +23,21 @@ export const STRATEGIES: StrategyInfo[] = [
     name: 'Combined (Recommended)',
     description: 'Uses all strategies together for best middle-content recovery',
     recommended: true,
+  },
+  {
+    id: 'reranking',
+    name: 'Reranking Prompt',
+    description: 'Places most relevant chunks first and last with explicit equal-attention instructions',
+  },
+  {
+    id: 'chunk_by_chunk_reasoning',
+    name: 'Chunk-by-Chunk Reasoning',
+    description: 'Evaluates each passage individually before synthesizing, with passage citations',
+  },
+  {
+    id: 'map_reduce',
+    name: 'Map-Reduce',
+    description: 'Extracts relevant facts per chunk (map), then combines them into a final answer (reduce)',
   },
   {
     id: 'attention_anchoring',
