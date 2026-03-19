@@ -86,29 +86,46 @@ export default function PDFUploader({ onUpload, currentDocument, onRemove, compa
     <div
       {...getRootProps()}
       className={`
-        border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer
-        transition-all duration-200
+        group relative rounded-2xl cursor-pointer transition-all duration-300 overflow-hidden
         ${isDragging
-          ? 'border-claude-accent bg-claude-accent-soft'
-          : 'border-claude-border hover:border-claude-text-muted/40 hover:bg-claude-surface/30'
+          ? 'ring-2 ring-claude-accent ring-offset-2 ring-offset-claude-bg'
+          : 'hover:ring-1 hover:ring-claude-border-light'
         }
       `}
     >
       <input {...getInputProps()} />
-      <div className="flex flex-col items-center gap-3">
-        <div className={`
-          p-3.5 rounded-2xl transition-colors
-          ${isDragging ? 'bg-claude-accent/20' : 'bg-claude-surface'}
-        `}>
-          <Upload className={`w-7 h-7 ${isDragging ? 'text-claude-accent' : 'text-claude-text-muted'}`} />
-        </div>
-        <div>
-          <p className="text-base font-medium text-claude-text mb-1">
-            {isDragging ? 'Drop your PDF here' : 'Upload PDF Document'}
-          </p>
-          <p className="text-sm text-claude-text-muted">
-            Drag and drop or click to select
-          </p>
+      {/* Gradient border effect */}
+      <div className={`absolute inset-0 rounded-2xl bg-gradient-to-b from-claude-border-light/50 via-claude-border/30 to-claude-border-light/50 p-px transition-opacity ${isDragging ? 'opacity-0' : 'opacity-100'}`}>
+        <div className="w-full h-full rounded-2xl bg-claude-bg" />
+      </div>
+
+      <div className={`relative p-8 text-center transition-colors ${isDragging ? 'bg-claude-accent/5' : ''}`}>
+        <div className="flex flex-col items-center gap-4">
+          <div className={`
+            w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300
+            ${isDragging
+              ? 'bg-claude-accent/15 scale-110'
+              : 'bg-claude-surface border border-claude-border group-hover:border-claude-border-light group-hover:scale-105'
+            }
+          `}>
+            <Upload className={`w-6 h-6 transition-colors ${isDragging ? 'text-claude-accent' : 'text-claude-text-muted group-hover:text-claude-text-secondary'}`} />
+          </div>
+          <div>
+            <p className="text-base font-semibold text-claude-text mb-1.5">
+              {isDragging ? 'Drop your PDF here' : 'Upload a PDF document'}
+            </p>
+            <p className="text-sm text-claude-text-muted">
+              Drag and drop or <span className="text-claude-accent">browse files</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-[11px] text-claude-text-muted">
+            <span className="flex items-center gap-1">
+              <File className="w-3 h-3" />
+              PDF only
+            </span>
+            <span className="w-px h-3 bg-claude-border" />
+            <span>Max 50MB</span>
+          </div>
         </div>
       </div>
     </div>

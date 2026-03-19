@@ -564,48 +564,67 @@ export default function Home() {
             documentName={currentDocument?.name || ''}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center p-6">
-            <div className="max-w-xl w-full space-y-8">
-              <div className="text-center relative">
-                {/* Animated gradient orb */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none -top-8">
-                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-claude-accent/20 to-amber-600/20 blur-3xl animate-gradient-orb" />
-                </div>
-                <div className="relative">
-                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-claude-accent/20 to-amber-600/20 mb-5">
-                    <Beaker className="w-7 h-7 text-claude-accent" />
+          <div className="flex-1 overflow-y-auto">
+            <div className="min-h-full flex flex-col items-center justify-center px-6 py-12">
+              <div className="max-w-2xl w-full">
+
+                {/* Hero */}
+                <div className="text-center mb-10 relative">
+                  {/* Background glow */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-r from-claude-accent/8 via-purple-500/6 to-blue-500/8 blur-[100px] rounded-full animate-gradient-orb" />
                   </div>
-                  <h2 className="text-2xl font-semibold text-claude-text mb-2">
-                    RAG Research Engine
-                  </h2>
-                  <p className="text-claude-text-secondary text-sm max-w-md mx-auto leading-relaxed">
-                    Upload a PDF to explore the Lost in the Middle phenomenon.
-                    Ask questions and compare recovery strategies.
+
+                  <div className="relative">
+                    {/* Badge */}
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-claude-surface border border-claude-border mb-6">
+                      <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-xs text-claude-text-secondary">Powered by Groq Llama 3.3 70B</span>
+                    </div>
+
+                    <h1 className="text-4xl font-bold text-claude-text mb-3 tracking-tight">
+                      RAG Research Engine
+                    </h1>
+                    <p className="text-claude-text-muted text-base max-w-lg mx-auto leading-relaxed mb-2">
+                      Explore the <span className="text-claude-text-secondary">Lost in the Middle</span> phenomenon in LLMs.
+                      Upload a document, ask questions, and see how different recovery strategies perform.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Upload Area */}
+                <div className="mb-10">
+                  <PDFUploader onUpload={handleUpload} />
+                </div>
+
+                {/* Feature Cards */}
+                <div className="grid grid-cols-2 gap-3 mb-8">
+                  {featureCards.map((item, i) => {
+                    const Icon = item.icon;
+                    return (
+                      <div
+                        key={item.title}
+                        className={`group p-4 rounded-xl bg-gradient-to-br ${item.gradient} border border-claude-border ${item.border} transition-all duration-300 animate-fade-in-up cursor-default`}
+                        style={{ animationDelay: `${i * 80}ms` }}
+                      >
+                        <div className={`w-8 h-8 rounded-lg bg-claude-surface border border-claude-border flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                          <Icon className={`w-4 h-4 ${item.iconColor}`} />
+                        </div>
+                        <p className="text-sm font-semibold text-claude-text mb-1">{item.title}</p>
+                        <p className="text-xs text-claude-text-muted leading-relaxed">{item.desc}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Footer */}
+                <div className="text-center">
+                  <p className="text-[11px] text-claude-text-muted">
+                    Based on <span className="text-claude-text-secondary">&ldquo;Lost in the Middle&rdquo;</span> by Liu et al. (2023) &middot; Built for RAG research
                   </p>
                 </div>
+
               </div>
-              <PDFUploader onUpload={handleUpload} />
-              <div className="grid grid-cols-2 gap-3">
-                {featureCards.map((item, i) => {
-                  const Icon = item.icon;
-                  return (
-                    <div
-                      key={item.title}
-                      className="p-3.5 rounded-xl bg-claude-surface border border-claude-border hover:border-claude-border-light hover:scale-[1.02] transition-all duration-200 animate-fade-in-up"
-                      style={{ animationDelay: `${i * 100}ms` }}
-                    >
-                      <div className="flex items-center gap-2.5 mb-1.5">
-                        <Icon className={`w-4 h-4 ${item.color}`} />
-                        <p className="text-sm font-medium text-claude-text">{item.title}</p>
-                      </div>
-                      <p className="text-xs text-claude-text-muted">{item.desc}</p>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-center text-[11px] text-claude-text-muted">
-                Powered by Groq Llama 3.3 70B &middot; Lost-in-the-Middle Recovery
-              </p>
             </div>
           </div>
         )}
