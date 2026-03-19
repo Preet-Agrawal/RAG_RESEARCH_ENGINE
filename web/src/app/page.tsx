@@ -1,16 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import PDFUploader from '@/components/PDFUploader';
 import ChatInterface from '@/components/ChatInterface';
+import ChatHistory from '@/components/ChatHistory';
+import { useToast } from '@/components/Toast';
 import {
-  Beaker, FileText, ChevronDown, ChevronUp, GitCompare, FlaskConical,
-  X, BarChart3, PanelLeftClose, PanelLeft, Plus, Trash2
+  Beaker, FileText, GitCompare, FlaskConical,
+  X, BarChart3, PanelLeftClose, PanelLeft, Plus, Trash2, Download,
+  Layers, Search, Target
 } from 'lucide-react';
 import type {
   Message, PDFDocument, Strategy, RAGResponse, ChunkSummary,
   SummarizeResponse, CompareResponse, BenchmarkResponse
 } from '@/types';
+import {
+  loadChatsFromStorage, saveChatToStorage, deleteChatFromStorage,
+  getChatFromStorage, type SavedChat, type SerializedMessage
+} from '@/lib/chatStorage';
 import axios from 'axios';
 
 interface SummaryData {
@@ -19,7 +26,22 @@ interface SummaryData {
   latency?: number;
 }
 
+function serializeMessages(messages: Message[]): SerializedMessage[] {
+  return messages.map(m => ({
+    ...m,
+    timestamp: m.timestamp.toISOString(),
+  }));
+}
+
+function deserializeMessages(messages: SerializedMessage[]): Message[] {
+  return messages.map(m => ({
+    ...m,
+    timestamp: new Date(m.timestamp),
+  }));
+}
+
 export default function Home() {
+  const { showToast } = useToast();
   const [currentDocument, setCurrentDocument] = useState<PDFDocument | null>(null);
   const [uploadedFilename, setUploadedFilename] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -28,7 +50,6 @@ export default function Home() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy>('combined');
   const [chunkSummaries, setChunkSummaries] = useState<ChunkSummary[]>([]);
-  const [showAllChunks, setShowAllChunks] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showBenchmarkModal, setShowBenchmarkModal] = useState(false);
   const [compareResults, setCompareResults] = useState<CompareResponse | null>(null);
@@ -38,6 +59,40 @@ export default function Home() {
   const [compareQuestion, setCompareQuestion] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // Chat history
+  const [savedChats, setSavedChats] = useState<SavedChat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+
+  // Load chat history on mount
+  useEffect(() => {
+    setSavedChats(loadChatsFromStorage());
+  }, []);
+
+  // Auto-save current chat when messages change
+  const saveCurrentChat = useCallback(() => {
+    if (!activeChatId || messages.length === 0 || !uploadedFilename) return;
+    const firstUserMsg = messages.find(m => m.role === 'user');
+    const chat: SavedChat = {
+      id: activeChatId,
+      title: firstUserMsg?.content.slice(0, 60) || currentDocument?.name || 'New Chat',
+      documentName: currentDocument?.name || '',
+      uploadedFilename,
+      messages: serializeMessages(messages),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    saveChatToStorage(chat);
+    setSavedChats(loadChatsFromStorage());
+  }, [activeChatId, messages, uploadedFilename, currentDocument]);
+
+  useEffect(() => {
+    if (messages.length > 0 && activeChatId) {
+      const timer = setTimeout(saveCurrentChat, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, saveCurrentChat, activeChatId]);
 
   const handleUpload = async (file: File) => {
     setIsUploading(true);
@@ -45,11 +100,14 @@ export default function Home() {
     setSummaryData(null);
     setChunkSummaries([]);
 
+    // Create a new chat session
+    const newChatId = 'chat-' + Date.now().toString();
+    setActiveChatId(newChatId);
+
     try {
       const formData = new FormData();
       formData.append('file', file);
 
-      // Set document early so we switch to chat view and show loading there
       setCurrentDocument({
         file,
         name: file.name,
@@ -109,10 +167,10 @@ export default function Home() {
           setIsSummarizing(false);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload failed:', error);
       setCurrentDocument(null);
-      alert('Failed to upload PDF. Please try again.');
+      showToast('Failed to upload PDF. Please try again.', 'error');
       setIsUploading(false);
     }
   };
@@ -126,6 +184,8 @@ export default function Home() {
   };
 
   const handleNewChat = () => {
+    // Save current chat before resetting
+    saveCurrentChat();
     setCurrentDocument(null);
     setUploadedFilename('');
     setMessages([]);
@@ -135,6 +195,34 @@ export default function Home() {
     setBenchmarkResults(null);
     setShowCompareModal(false);
     setShowBenchmarkModal(false);
+    setActiveChatId(null);
+  };
+
+  const handleRestoreChat = (chatId: string) => {
+    const chat = getChatFromStorage(chatId);
+    if (!chat) return;
+
+    setActiveChatId(chatId);
+    setMessages(deserializeMessages(chat.messages));
+    setUploadedFilename(chat.uploadedFilename);
+    setCurrentDocument({
+      file: new File([], chat.documentName),
+      name: chat.documentName,
+      size: 0,
+      uploadedAt: new Date(),
+    });
+    setChunkSummaries([]);
+    setSummaryData(null);
+    setCompareResults(null);
+    setBenchmarkResults(null);
+  };
+
+  const handleDeleteChat = (chatId: string) => {
+    deleteChatFromStorage(chatId);
+    setSavedChats(loadChatsFromStorage());
+    if (activeChatId === chatId) {
+      handleNewChat();
+    }
   };
 
   const handleSendMessage = async (messageText: string) => {
@@ -206,7 +294,7 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('Compare failed:', error);
-      alert('Failed to compare strategies: ' + (error.response?.data?.error || error.message));
+      showToast('Failed to compare strategies: ' + (error.response?.data?.error || error.message), 'error');
     } finally {
       setIsComparing(false);
     }
@@ -225,23 +313,75 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('Benchmark failed:', error);
-      alert('Failed to run benchmark: ' + (error.response?.data?.error || error.message));
+      showToast('Failed to run benchmark: ' + (error.response?.data?.error || error.message), 'error');
     } finally {
       setIsBenchmarking(false);
     }
   };
 
-  const getZoneColor = (zone: string, isMiddle: boolean) => {
-    if (isMiddle) return 'border-l-orange-500 bg-orange-500/5';
-    if (zone === 'beginning') return 'border-l-emerald-500 bg-emerald-500/5';
-    return 'border-l-blue-500 bg-blue-500/5';
+  const handleExportJSON = () => {
+    const data = {
+      document: currentDocument?.name,
+      strategy: selectedStrategy,
+      exportedAt: new Date().toISOString(),
+      messages: messages.map(m => ({
+        role: m.role,
+        content: m.content === '__SUMMARY__' ? summaryData?.overallSummary : m.content,
+        timestamp: m.timestamp.toISOString(),
+        metadata: m.metadata,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rag-chat-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+    showToast('Chat exported as JSON', 'success');
   };
 
-  const getZoneLabel = (zone: string) => {
-    if (zone === 'middle') return 'Middle';
-    if (zone === 'beginning') return 'Start';
-    return 'End';
+  const handleExportMarkdown = () => {
+    let md = `# RAG Analysis: ${currentDocument?.name || 'Document'}\n\n`;
+    md += `**Strategy:** ${selectedStrategy}\n`;
+    md += `**Exported:** ${new Date().toLocaleString()}\n\n---\n\n`;
+
+    if (summaryData) {
+      md += `## Document Summary\n\n${summaryData.overallSummary}\n\n`;
+      md += `### Sections (${summaryData.chunkSummaries.length} chunks)\n\n`;
+      summaryData.chunkSummaries.forEach(c => {
+        md += `- **Section ${c.chunkId}** [${c.zone}]: ${c.summary}\n`;
+      });
+      md += '\n---\n\n';
+    }
+
+    md += '## Conversation\n\n';
+    messages.forEach(m => {
+      if (m.content === '__SUMMARY__') return;
+      md += `### ${m.role === 'user' ? 'Question' : 'Answer'}\n\n${m.content}\n\n`;
+      if (m.metadata) {
+        md += `> Confidence: ${Math.round((m.metadata.confidence || 0) * 100)}% | Latency: ${m.metadata.latency?.toFixed(2)}s | Strategy: ${m.metadata.strategyUsed}\n\n`;
+      }
+    });
+
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rag-analysis-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+    showToast('Analysis exported as Markdown', 'success');
   };
+
+  const featureCards = [
+    { title: 'Smart Chunking', desc: 'Position-aware document splitting with overlap detection', icon: Layers, gradient: 'from-blue-500/10 to-cyan-500/10', border: 'hover:border-blue-500/30', iconColor: 'text-blue-400' },
+    { title: 'Middle Recovery', desc: '10 strategies to recover content LLMs typically miss', icon: Target, gradient: 'from-orange-500/10 to-red-500/10', border: 'hover:border-orange-500/30', iconColor: 'text-orange-400' },
+    { title: 'Strategy Comparison', desc: 'Run queries across all strategies and compare results', icon: GitCompare, gradient: 'from-purple-500/10 to-pink-500/10', border: 'hover:border-purple-500/30', iconColor: 'text-purple-400' },
+    { title: 'Needle Benchmark', desc: 'Test retrieval accuracy at every document position', icon: Search, gradient: 'from-emerald-500/10 to-teal-500/10', border: 'hover:border-emerald-500/30', iconColor: 'text-emerald-400' },
+  ];
 
   return (
     <div className="h-screen flex overflow-hidden bg-claude-bg">
@@ -283,7 +423,7 @@ export default function Home() {
                         {currentDocument.name}
                       </p>
                       <p className="text-xs text-claude-text-muted">
-                        {(currentDocument.size / 1024).toFixed(1)} KB
+                        {currentDocument.size > 0 ? `${(currentDocument.size / 1024).toFixed(1)} KB` : 'Restored'}
                       </p>
                     </div>
                   </div>
@@ -320,50 +460,15 @@ export default function Home() {
             </div>
           )}
 
-          {/* Chunk Summaries */}
-          {chunkSummaries.length > 0 && (
-            <div className="flex-1 flex flex-col overflow-hidden border-t border-claude-border">
-              <div className="px-3 py-2.5 flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-claude-text-muted uppercase tracking-wider">
-                  Document Sections
-                </h3>
-                <button
-                  onClick={() => setShowAllChunks(!showAllChunks)}
-                  className="text-xs text-claude-accent hover:text-claude-accent-hover flex items-center gap-0.5 transition-colors"
-                >
-                  {showAllChunks ? 'Less' : 'All'}
-                  {showAllChunks ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
-                {(showAllChunks
-                  ? chunkSummaries
-                  : chunkSummaries.filter(c => c.isMiddle || c.chunkId <= 2 || c.chunkId >= chunkSummaries.length - 1)
-                ).map((chunk) => (
-                  <div
-                    key={chunk.chunkId}
-                    className={`p-2.5 rounded-lg border-l-2 ${getZoneColor(chunk.zone, chunk.isMiddle)}`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-claude-text-secondary">
-                        {chunk.chunkId}/{chunk.totalChunks}
-                      </span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                        chunk.isMiddle
-                          ? 'bg-orange-500/15 text-orange-400'
-                          : 'bg-claude-surface text-claude-text-muted'
-                      }`}>
-                        {getZoneLabel(chunk.zone)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-claude-text-secondary leading-relaxed line-clamp-2">
-                      {chunk.summary}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Chat History */}
+          <div className="flex-1 overflow-y-auto">
+            <ChatHistory
+              chats={savedChats}
+              activeChatId={activeChatId}
+              onSelectChat={handleRestoreChat}
+              onDeleteChat={handleDeleteChat}
+            />
+          </div>
 
           {/* Sidebar Footer */}
           <div className="p-3 border-t border-claude-border">
@@ -392,7 +497,7 @@ export default function Home() {
               <PanelLeft className="w-4 h-4" />
             </button>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <h1 className="text-sm font-medium text-claude-text">
               {currentDocument ? currentDocument.name : 'RAG Research Engine'}
             </h1>
@@ -402,6 +507,46 @@ export default function Home() {
               </span>
             )}
           </div>
+
+          {/* New Chat button in top bar */}
+          <button
+            onClick={handleNewChat}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-claude-surface-hover text-claude-text-secondary hover:text-claude-text transition-colors text-sm mr-1"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Chat
+          </button>
+
+          {/* Export Button */}
+          {currentDocument && messages.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="p-2 rounded-lg hover:bg-claude-surface-hover text-claude-text-secondary hover:text-claude-text transition-colors"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              {showExportMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-claude-surface border border-claude-border rounded-xl shadow-xl z-50 overflow-hidden">
+                    <button
+                      onClick={handleExportJSON}
+                      className="w-full px-4 py-2.5 text-left text-sm text-claude-text-secondary hover:bg-claude-surface-hover hover:text-claude-text transition-colors"
+                    >
+                      Export as JSON
+                    </button>
+                    <button
+                      onClick={handleExportMarkdown}
+                      className="w-full px-4 py-2.5 text-left text-sm text-claude-text-secondary hover:bg-claude-surface-hover hover:text-claude-text transition-colors border-t border-claude-border/50"
+                    >
+                      Export as Markdown
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Chat Content */}
@@ -421,35 +566,46 @@ export default function Home() {
         ) : (
           <div className="flex-1 flex items-center justify-center p-6">
             <div className="max-w-xl w-full space-y-8">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-claude-accent/20 to-amber-600/20 mb-5">
-                  <Beaker className="w-7 h-7 text-claude-accent" />
+              <div className="text-center relative">
+                {/* Animated gradient orb */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none -top-8">
+                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-claude-accent/20 to-amber-600/20 blur-3xl animate-gradient-orb" />
                 </div>
-                <h2 className="text-2xl font-semibold text-claude-text mb-2">
-                  RAG Research Engine
-                </h2>
-                <p className="text-claude-text-secondary text-sm max-w-md mx-auto leading-relaxed">
-                  Upload a PDF to explore the Lost in the Middle phenomenon.
-                  Ask questions and compare recovery strategies.
-                </p>
+                <div className="relative">
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-claude-accent/20 to-amber-600/20 mb-5">
+                    <Beaker className="w-7 h-7 text-claude-accent" />
+                  </div>
+                  <h2 className="text-2xl font-semibold text-claude-text mb-2">
+                    RAG Research Engine
+                  </h2>
+                  <p className="text-claude-text-secondary text-sm max-w-md mx-auto leading-relaxed">
+                    Upload a PDF to explore the Lost in the Middle phenomenon.
+                    Ask questions and compare recovery strategies.
+                  </p>
+                </div>
               </div>
               <PDFUploader onUpload={handleUpload} />
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  { title: 'Smart Chunking', desc: 'Position-aware document splitting' },
-                  { title: 'Middle Recovery', desc: 'Strategies to recover lost content' },
-                  { title: 'Strategy Comparison', desc: 'Compare 7 recovery approaches' },
-                  { title: 'Needle Benchmark', desc: 'Map attention dead zones' },
-                ].map((item) => (
-                  <div
-                    key={item.title}
-                    className="p-3.5 rounded-xl bg-claude-surface border border-claude-border hover:border-claude-border-light transition-colors"
-                  >
-                    <p className="text-sm font-medium text-claude-text mb-0.5">{item.title}</p>
-                    <p className="text-xs text-claude-text-muted">{item.desc}</p>
-                  </div>
-                ))}
+                {featureCards.map((item, i) => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.title}
+                      className="p-3.5 rounded-xl bg-claude-surface border border-claude-border hover:border-claude-border-light hover:scale-[1.02] transition-all duration-200 animate-fade-in-up"
+                      style={{ animationDelay: `${i * 100}ms` }}
+                    >
+                      <div className="flex items-center gap-2.5 mb-1.5">
+                        <Icon className={`w-4 h-4 ${item.color}`} />
+                        <p className="text-sm font-medium text-claude-text">{item.title}</p>
+                      </div>
+                      <p className="text-xs text-claude-text-muted">{item.desc}</p>
+                    </div>
+                  );
+                })}
               </div>
+              <p className="text-center text-[11px] text-claude-text-muted">
+                Powered by Groq Llama 3.3 70B &middot; Lost-in-the-Middle Recovery
+              </p>
             </div>
           </div>
         )}
@@ -576,7 +732,7 @@ export default function Home() {
               {!benchmarkResults && !isBenchmarking && (
                 <div className="space-y-4">
                   <p className="text-sm text-claude-text-secondary">
-                    Insert a "needle" fact at different positions and measure how well strategies find it.
+                    Insert a &quot;needle&quot; fact at different positions and measure how well strategies find it.
                   </p>
                   <div className="flex gap-2 flex-wrap">
                     {[10, 25, 40, 50, 60, 75, 90].map((pos) => (
@@ -654,10 +810,10 @@ export default function Home() {
                           </div>
                           <div className="flex items-center gap-4 text-sm">
                             <span className={result.baselineFound ? 'text-emerald-400' : 'text-red-400'}>
-                              Baseline {result.baselineFound ? '✓' : '✗'}
+                              Baseline {result.baselineFound ? '\u2713' : '\u2717'}
                             </span>
                             <span className={result.combinedFound ? 'text-emerald-400' : 'text-red-400'}>
-                              Combined {result.combinedFound ? '✓' : '✗'}
+                              Combined {result.combinedFound ? '\u2713' : '\u2717'}
                             </span>
                             {result.recoverySuccess && (
                               <span className="text-purple-400 text-xs font-medium">Recovered</span>

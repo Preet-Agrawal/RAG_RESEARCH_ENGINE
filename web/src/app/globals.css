@@ -55,24 +55,95 @@
   transition: width 0.2s ease, opacity 0.15s ease;
 }
 
-/* Message content formatting */
-.message-content p {
-  margin-bottom: 0.75rem;
+/* Shimmer skeleton loading */
+.shimmer-bar {
+  background: linear-gradient(90deg, #212121 25%, #2a2a2a 50%, #212121 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }
-.message-content p:last-child {
-  margin-bottom: 0;
+
+/* Toast slide-in animation */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
-.message-content strong {
-  font-weight: 600;
-  color: #ececec;
+
+/* Landing page animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.message-content ul, .message-content ol {
-  padding-left: 1.25rem;
-  margin-bottom: 0.75rem;
+
+@keyframes gradientOrb {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.15;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.25;
+  }
 }
-.message-content li {
-  margin-bottom: 0.25rem;
+
+@keyframes typewriter {
+  from { width: 0; }
+  to { width: 100%; }
 }
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-gradient-orb {
+  animation: gradientOrb 4s ease-in-out infinite;
+}
+
+/* Markdown body styles */
+.markdown-body code {
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+}
+
+.markdown-body pre {
+  margin: 0;
+}
+
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.875rem;
+  color: #e6edf3;
+}
+
+/* Syntax highlighting - GitHub Dark style */
+.markdown-body pre code .hljs-keyword { color: #ff7b72; }
+.markdown-body pre code .hljs-string { color: #a5d6ff; }
+.markdown-body pre code .hljs-number { color: #79c0ff; }
+.markdown-body pre code .hljs-comment { color: #8b949e; }
+.markdown-body pre code .hljs-function { color: #d2a8ff; }
+.markdown-body pre code .hljs-title { color: #d2a8ff; }
+.markdown-body pre code .hljs-built_in { color: #ffa657; }
+.markdown-body pre code .hljs-type { color: #ffa657; }
+.markdown-body pre code .hljs-attr { color: #79c0ff; }
+.markdown-body pre code .hljs-variable { color: #ffa657; }
+.markdown-body pre code .hljs-params { color: #e6edf3; }
+.markdown-body pre code .hljs-meta { color: #79c0ff; }
+.markdown-body pre code .hljs-selector-tag { color: #7ee787; }
+.markdown-body pre code .hljs-selector-class { color: #d2a8ff; }
+.markdown-body pre code .hljs-literal { color: #79c0ff; }
 
 /* Select styling */
 select option {

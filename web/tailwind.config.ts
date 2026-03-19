@@ -36,11 +36,16 @@ const config: Config = {
       },
       animation: {
         'pulse-dot': 'pulse-dot 1.4s infinite ease-in-out both',
+        shimmer: 'shimmer 1.5s infinite',
       },
       keyframes: {
         'pulse-dot': {
           '0%, 80%, 100%': { transform: 'scale(0.4)', opacity: '0.4' },
           '40%': { transform: 'scale(1)', opacity: '1' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
         },
       },
     },

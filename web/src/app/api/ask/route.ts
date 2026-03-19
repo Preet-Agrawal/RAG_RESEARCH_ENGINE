@@ -12,7 +12,10 @@ export type Strategy =
   | 'relevance_restructuring'
   | 'query_aware_compression'
   | 'query_aware_contextualization'
-  | 'chunked_reading';
+  | 'chunked_reading'
+  | 'reranking'
+  | 'chunk_by_chunk_reasoning'
+  | 'map_reduce';
 
 interface AskRequest {
   question: string;
