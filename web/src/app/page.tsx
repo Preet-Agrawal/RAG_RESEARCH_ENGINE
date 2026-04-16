@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import PDFUploader from '@/components/PDFUploader';
 import ChatInterface from '@/components/ChatInterface';
 import ChatHistory from '@/components/ChatHistory';
+import EvaluationDashboard from '@/components/EvaluationDashboard';
 import { useToast } from '@/components/Toast';
 import {
   Beaker, FileText, GitCompare, FlaskConical,
@@ -60,6 +61,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showEvalDashboard, setShowEvalDashboard] = useState(false);
 
   // Chat history
   const [savedChats, setSavedChats] = useState<SavedChat[]>([]);
@@ -456,6 +458,13 @@ export default function Home() {
               >
                 <FlaskConical className="w-4 h-4 text-emerald-400" />
                 Run Benchmark
+              </button>
+              <button
+                onClick={() => setShowEvalDashboard(true)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-claude-surface-hover text-claude-text-secondary hover:text-claude-text transition-colors text-sm"
+              >
+                <Target className="w-4 h-4 text-blue-400" />
+                Position Recovery Test
               </button>
             </div>
           )}
@@ -863,6 +872,12 @@ export default function Home() {
           </div>
         </div>
       )}
+      {/* Evaluation Dashboard */}
+      <EvaluationDashboard
+        isOpen={showEvalDashboard}
+        onClose={() => setShowEvalDashboard(false)}
+        filename={uploadedFilename || undefined}
+      />
     </div>
   );
 }

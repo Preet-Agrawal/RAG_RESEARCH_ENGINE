@@ -15,7 +15,8 @@ export type Strategy =
   | 'chunked_reading'
   | 'reranking'
   | 'chunk_by_chunk_reasoning'
-  | 'map_reduce';
+  | 'map_reduce'
+  | 'para';
 
 interface AskRequest {
   question: string;
@@ -57,7 +58,8 @@ export async function POST(request: NextRequest) {
       'chunked_reading',
       'reranking',
       'chunk_by_chunk_reasoning',
-      'map_reduce'
+      'map_reduce',
+      'para'
     ];
 
     if (!validStrategies.includes(strategy)) {

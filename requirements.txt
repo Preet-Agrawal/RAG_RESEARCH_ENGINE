@@ -2,3 +2,7 @@ openai>=1.12.0
 anthropic>=0.18.0
 python-dotenv>=1.0.0
 PyPDF2>=3.0.0
+
+# PARA strategy (semantic embeddings + position-aware retrieval)
+sentence-transformers>=2.2.0
+numpy>=1.24.0

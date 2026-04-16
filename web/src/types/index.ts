@@ -8,7 +8,8 @@ export type Strategy =
   | 'chunked_reading'
   | 'reranking'
   | 'chunk_by_chunk_reasoning'
-  | 'map_reduce';
+  | 'map_reduce'
+  | 'para';
 
 export interface StrategyInfo {
   id: Strategy;
@@ -19,9 +20,15 @@ export interface StrategyInfo {
 
 export const STRATEGIES: StrategyInfo[] = [
   {
+    id: 'para',
+    name: 'PARA (Position-Aware Retrieval)',
+    description: 'Semantic embedding retrieval with position-bias correction — our novel contribution',
+    recommended: true,
+  },
+  {
     id: 'combined',
-    name: 'Combined (Recommended)',
-    description: 'Uses all strategies together for best middle-content recovery',
+    name: 'Combined',
+    description: 'Uses all prompt strategies together for best middle-content recovery',
     recommended: true,
   },
   {
@@ -170,3 +177,4 @@ export interface BenchmarkResponse {
   totalLatency: number;
   error?: string;
 }
+

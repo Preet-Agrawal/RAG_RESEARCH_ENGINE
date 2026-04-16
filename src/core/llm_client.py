@@ -29,15 +29,25 @@ class LLMResponse:
     metadata: Dict[str, Any]
 
 
+_RATE_LIMITS = {
+    "groq": 2.1,       # ~30 req/min free tier
+    "openai": 0.1,
+    "anthropic": 0.2,
+}
+
+
 class LLMClient:
     """Unified client for multiple LLM providers."""
 
     def __init__(self, provider: str = "groq", model: str = "llama3-8b-8192",
-                 temperature: float = 0.0, max_tokens: int = 4096, api_key: Optional[str] = None):
+                 temperature: float = 0.0, max_tokens: int = 4096, api_key: Optional[str] = None,
+                 rate_limit: Optional[float] = None):
         self.provider = provider
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self._min_interval = rate_limit if rate_limit is not None else _RATE_LIMITS.get(provider, 0.0)
+        self._last_request_time = 0.0
 
         if provider == "openai":
             if not OPENAI_AVAILABLE:
@@ -70,7 +80,14 @@ class LLMClient:
         Returns:
             LLMResponse object
         """
+        # Rate limiting: wait if needed to respect provider limits
+        if self._min_interval > 0:
+            elapsed = time.time() - self._last_request_time
+            if elapsed < self._min_interval:
+                time.sleep(self._min_interval - elapsed)
+
         start_time = time.time()
+        self._last_request_time = start_time
 
         temperature = kwargs.get('temperature', self.temperature)
         max_tokens = kwargs.get('max_tokens', self.max_tokens)

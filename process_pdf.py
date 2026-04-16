@@ -16,7 +16,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from src.core.llm_client import LLMClient
 from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from src.para import PARARetriever
+    PARA_AVAILABLE = True
+except ImportError:
+    PARA_AVAILABLE = False
+
+load_dotenv(Path(__file__).parent / ".env")
 
 
 @dataclass
@@ -476,6 +482,37 @@ Relevant facts:"""
         aggregated = "\n\n".join(all_facts)
         return aggregated
 
+    def apply_para(self, chunks: List[TextChunk], query: str,
+                    alpha: float = 0.7, beta: float = 0.3, gamma: float = 0.3,
+                    top_k: int = 10):
+        """
+        Position-Aware Retrieval Augmentation (PARA).
+
+        Uses semantic embeddings + sinusoidal position-bias correction
+        to retrieve the most relevant chunks while counteracting the
+        U-shaped attention drop in LLMs.
+
+        Returns: (context_string, confidence_from_semantic_similarity)
+        """
+        if not PARA_AVAILABLE:
+            raise ImportError(
+                "PARA requires sentence-transformers. "
+                "Install with: pip install sentence-transformers"
+            )
+
+        # Convert chunks to PARA TextChunk format
+        from src.para import TextChunk as PARAChunk
+        para_chunks = [
+            PARAChunk(content=c.content, doc_id=c.doc_id, position=c.position)
+            for c in chunks
+        ]
+
+        retriever = PARARetriever()
+        context, avg_semantic_sim = retriever.build_para_context(
+            query, para_chunks, top_k=top_k, alpha=alpha, beta=beta, gamma=gamma
+        )
+        return context, avg_semantic_sim
+
     def get_system_prompt(self, strategy: str) -> str:
         """Get appropriate system prompt for the strategy."""
         detail_instruction = """
@@ -546,6 +583,18 @@ CRITICAL INSTRUCTIONS:
 5. Do NOT skip any passage - evaluate every single one
 {detail_instruction}""",
 
+            "para": f"""You are an expert research assistant. The document sections below were retrieved using
+semantic search with position-aware scoring (PARA). They are ranked by combined relevance:
+semantic similarity to your question PLUS a position-bias correction that recovers
+middle-document content typically missed by LLMs.
+
+INSTRUCTIONS:
+1. All retrieved sections are highly relevant — read each one carefully
+2. Sections from the document middle have been boosted to counteract the known LLM attention gap
+3. Synthesize information from ALL sections, not just the first or last
+4. Include specific facts, numbers, and details from the retrieved content
+{detail_instruction}""",
+
             "map_reduce": f"""You are an expert research assistant performing the REDUCE step of a map-reduce analysis.
 You are given extracted facts from different parts of a document. Your job is to:
 1. Review ALL the extracted facts carefully
@@ -558,6 +607,29 @@ You are given extracted facts from different parts of a document. Your job is to
         return prompts.get(strategy, prompts["baseline"])
 
 
+def _get_groq_client_with_fallback(temperature: float = 0.1) -> LLMClient:
+    """Try each Groq model in the fallback chain until one works."""
+    api_key = os.getenv("GROQ_API_KEY")
+    last_error = None
+    for model_name in GROQ_MODEL_FALLBACK:
+        try:
+            client = LLMClient(
+                provider="groq",
+                model=model_name,
+                temperature=temperature,
+                api_key=api_key
+            )
+            # Quick test to see if this model is rate-limited
+            client.generate("Hi", max_tokens=5)
+            return client
+        except Exception as e:
+            last_error = e
+            if "429" in str(e) or "rate_limit" in str(e).lower():
+                continue  # Try next model
+            raise  # Non-rate-limit error, re-raise
+    raise last_error  # All models rate-limited
+
+
 def summarize_document(pdf_text: str) -> Dict[str, Any]:
     """
     Summarize all chunks of the document with special focus on middle content.
@@ -567,12 +639,7 @@ def summarize_document(pdf_text: str) -> Dict[str, Any]:
     start_time = time.time()
 
     try:
-        client = LLMClient(
-            provider="groq",
-            model="llama-3.3-70b-versatile",
-            temperature=0.1,
-            api_key=os.getenv("GROQ_API_KEY")
-        )
+        client = _get_groq_client_with_fallback()
 
         processor = MiddleRecoveryProcessor(client)
         chunks = processor.chunk_text(pdf_text, chunk_size=400, overlap=50)
@@ -668,6 +735,13 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         return f"Error extracting PDF: {str(e)}"
 
 
+GROQ_MODEL_FALLBACK = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "gemma2-9b-it",
+]
+
+
 def get_llm_client(provider: str = "groq", model: str = None) -> LLMClient:
     """
     Get LLM client for specified provider.
@@ -675,7 +749,7 @@ def get_llm_client(provider: str = "groq", model: str = None) -> LLMClient:
     """
     provider_configs = {
         "groq": {
-            "model": model or "llama-3.3-70b-versatile",
+            "model": model or GROQ_MODEL_FALLBACK[0],
             "api_key": os.getenv("GROQ_API_KEY"),
             "provider": "groq"
         },
@@ -690,6 +764,10 @@ def get_llm_client(provider: str = "groq", model: str = None) -> LLMClient:
             "provider": "anthropic"
         }
     }
+
+    if provider == "groq" and not model:
+        # Use fallback chain for groq to handle rate limits
+        return _get_groq_client_with_fallback()
 
     config = provider_configs.get(provider, provider_configs["groq"])
     return LLMClient(
@@ -815,6 +893,51 @@ Provide a clear, complete answer:"""
                 system_prompt = processor.get_system_prompt("combined")
                 strategy = "combined (fallback)"
 
+        elif strategy == "para":
+            # Position-Aware Retrieval Augmentation (PARA)
+            para_context, semantic_confidence = processor.apply_para(chunks, question)
+            context = para_context
+            system_prompt = processor.get_system_prompt("para")
+
+            # Override heuristic confidence with semantic similarity
+            if len(context) > 24000:
+                context = context[:24000] + "\n\n[Document truncated for processing...]"
+
+            prompt = f"""{context}
+
+---
+Based ONLY on the retrieved sections above, provide a DETAILED and COMPREHENSIVE answer to the question.
+
+IMPORTANT:
+- Include ALL relevant information, facts, numbers, and specific details found
+- If multiple relevant points exist, list and explain each one
+- Quote or reference specific passages when helpful
+- If the answer is not in the retrieved sections, say "The document does not contain information to answer this question."
+
+Question: {question}
+
+Detailed Answer:"""
+
+            response = client.generate(prompt, system_prompt=system_prompt)
+
+            # Use semantic similarity as confidence instead of heuristic
+            confidence = round(max(0.1, min(1.0, semantic_confidence)), 2)
+            if "not contain" in response.text.lower() or "cannot find" in response.text.lower():
+                confidence = 0.15
+
+            return {
+                "answer": response.text,
+                "sources": ["PDF Document"],
+                "confidence": confidence,
+                "strategy_used": strategy,
+                "chunks_processed": len(chunks),
+                "latency": time.time() - start_time,
+                "strategy_explanation": "PARA: Semantic embedding retrieval with position-bias correction for middle-document recovery",
+                "model_used": client.model,
+                "provider": provider,
+                "para_semantic_similarity": round(semantic_confidence, 4)
+            }
+
         else:  # combined (default and recommended)
             context = processor.apply_combined_strategy(chunks, question)
             system_prompt = processor.get_system_prompt("combined")
@@ -861,7 +984,8 @@ Detailed Answer:"""
             "combined (fallback from map_reduce)": "Map-reduce found no relevant facts, fell back to combined strategy",
             "reranking": "Reranked chunks with most relevant at start and end, explicit equal-attention instructions",
             "chunk_by_chunk_reasoning": "Per-passage evaluation with citation, then synthesis from all relevant passages",
-            "map_reduce": "Map-Reduce: extracted facts per chunk, then synthesized final answer"
+            "map_reduce": "Map-Reduce: extracted facts per chunk, then synthesized final answer",
+            "para": "PARA: Semantic embedding retrieval with position-bias correction for middle-document recovery"
         }
 
         return {
@@ -904,8 +1028,12 @@ def compare_strategies(pdf_text: str, question: str) -> Dict[str, Any]:
         "query_aware_compression",
         "query_aware_contextualization",
         "chunked_reading",
-        "combined"
+        "combined",
     ]
+
+    # Include PARA if sentence-transformers is available
+    if PARA_AVAILABLE:
+        strategies.append("para")
 
     results = []
     for strategy in strategies:
