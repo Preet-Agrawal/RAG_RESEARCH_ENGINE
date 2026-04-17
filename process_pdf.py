@@ -17,7 +17,7 @@ from src.core.llm_client import LLMClient
 from dotenv import load_dotenv
 
 try:
-    from src.para import PARARetriever
+    from src.para import PARARetriever, semantic_chunk_text
     PARA_AVAILABLE = True
 except ImportError:
     PARA_AVAILABLE = False
@@ -482,15 +482,31 @@ Relevant facts:"""
         aggregated = "\n\n".join(all_facts)
         return aggregated
 
-    def apply_para(self, chunks: List[TextChunk], query: str,
-                    alpha: float = 0.7, beta: float = 0.3, gamma: float = 0.3,
-                    top_k: int = 10):
+    def chunk_text_semantic(self, text: str) -> List[TextChunk]:
         """
-        Position-Aware Retrieval Augmentation (PARA).
+        Semantic chunking — splits at topic boundaries using embedding similarity
+        instead of fixed word count. Preserves meaning within chunks.
+        """
+        if not PARA_AVAILABLE:
+            return self.chunk_text(text)
 
-        Uses semantic embeddings + sinusoidal position-bias correction
-        to retrieve the most relevant chunks while counteracting the
-        U-shaped attention drop in LLMs.
+        para_chunks = semantic_chunk_text(text)
+        return [
+            TextChunk(content=c.content, doc_id=c.doc_id, position=c.position)
+            for c in para_chunks
+        ]
+
+    def apply_para(self, chunks: List[TextChunk], query: str,
+                    alpha: float = 0.7, beta: float = 0.3, gamma: float = None,
+                    top_k: int = 10, full_text: str = None):
+        """
+        Position-Aware Retrieval Augmentation (PARA) — Enhanced.
+
+        Features:
+          - Semantic embeddings (all-MiniLM-L6-v2)
+          - Adaptive gamma (scales with document length)
+          - Multi-granularity retrieval (sentence + paragraph + section)
+          - Cross-encoder reranking for top results
 
         Returns: (context_string, confidence_from_semantic_similarity)
         """
@@ -500,7 +516,6 @@ Relevant facts:"""
                 "Install with: pip install sentence-transformers"
             )
 
-        # Convert chunks to PARA TextChunk format
         from src.para import TextChunk as PARAChunk
         para_chunks = [
             PARAChunk(content=c.content, doc_id=c.doc_id, position=c.position)
@@ -509,7 +524,8 @@ Relevant facts:"""
 
         retriever = PARARetriever()
         context, avg_semantic_sim = retriever.build_para_context(
-            query, para_chunks, top_k=top_k, alpha=alpha, beta=beta, gamma=gamma
+            query, para_chunks, top_k=top_k, alpha=alpha, beta=beta,
+            gamma=gamma, use_cross_encoder=True, full_text=full_text,
         )
         return context, avg_semantic_sim
 
@@ -894,12 +910,21 @@ Provide a clear, complete answer:"""
                 strategy = "combined (fallback)"
 
         elif strategy == "para":
-            # Position-Aware Retrieval Augmentation (PARA)
-            para_context, semantic_confidence = processor.apply_para(chunks, question)
+            # ── PARA: Position-Aware Retrieval Augmentation (Enhanced) ──
+
+            # Step 1: Use semantic chunking for better chunk boundaries
+            if PARA_AVAILABLE:
+                semantic_chunks = processor.chunk_text_semantic(pdf_text)
+                if len(semantic_chunks) >= 3:
+                    chunks = semantic_chunks
+
+            # Step 2: PARA retrieval with adaptive gamma + multi-granularity + cross-encoder
+            para_context, semantic_confidence = processor.apply_para(
+                chunks, question, full_text=pdf_text
+            )
             context = para_context
             system_prompt = processor.get_system_prompt("para")
 
-            # Override heuristic confidence with semantic similarity
             if len(context) > 24000:
                 context = context[:24000] + "\n\n[Document truncated for processing...]"
 
@@ -920,22 +945,74 @@ Detailed Answer:"""
 
             response = client.generate(prompt, system_prompt=system_prompt)
 
-            # Use semantic similarity as confidence instead of heuristic
             confidence = round(max(0.1, min(1.0, semantic_confidence)), 2)
-            if "not contain" in response.text.lower() or "cannot find" in response.text.lower():
+            answer_text = response.text
+            grounded = True
+
+            # Step 3: Iterative Middle Probing — if confidence is low, re-probe middle
+            if confidence < 0.4 or "not contain" in answer_text.lower():
+                middle_chunks = [c for c in chunks if 0.25 <= c.position <= 0.75]
+                if middle_chunks:
+                    middle_context, _ = processor.apply_para(
+                        middle_chunks, question, alpha=0.5, beta=0.5
+                    )
+                    if middle_context:
+                        reprobe_prompt = f"""The previous search may have missed information in the middle of the document.
+Here are sections specifically from the MIDDLE of the document:
+
+{middle_context[:12000]}
+
+Question: {question}
+
+If you find relevant information, provide a detailed answer. If not, say "Not found.":"""
+
+                        reprobe_response = client.generate(reprobe_prompt, system_prompt=system_prompt)
+                        reprobe_text = reprobe_response.text
+
+                        if "not found" not in reprobe_text.lower() and len(reprobe_text) > 30:
+                            answer_text = f"{answer_text}\n\n**[Additional information recovered from middle sections]:**\n{reprobe_text}"
+                            confidence = min(confidence + 0.2, 0.9)
+
+            # Step 4: Answer Grounding Check — verify answer is supported by retrieved chunks
+            if len(answer_text) > 50 and "not contain" not in answer_text.lower():
+                grounding_prompt = f"""You are a fact-checker. Given the CONTEXT and the ANSWER below, check if every claim in the answer is supported by the context.
+
+CONTEXT:
+{context[:8000]}
+
+ANSWER:
+{answer_text[:2000]}
+
+Reply with ONLY one of:
+- "GROUNDED" if all claims are supported by the context
+- "PARTIALLY GROUNDED" if some claims are supported but others are not
+- "UNGROUNDED" if the answer contains claims not found in the context"""
+
+                grounding_response = client.generate(grounding_prompt, max_tokens=50)
+                grounding_result = grounding_response.text.strip().upper()
+
+                if "UNGROUNDED" in grounding_result:
+                    grounded = False
+                    confidence = max(confidence - 0.3, 0.1)
+                    answer_text += "\n\n*Note: Some claims in this answer could not be verified against the document.*"
+                elif "PARTIALLY" in grounding_result:
+                    confidence = max(confidence - 0.1, 0.2)
+
+            if "not contain" in answer_text.lower() or "cannot find" in answer_text.lower():
                 confidence = 0.15
 
             return {
-                "answer": response.text,
+                "answer": answer_text,
                 "sources": ["PDF Document"],
                 "confidence": confidence,
                 "strategy_used": strategy,
                 "chunks_processed": len(chunks),
                 "latency": time.time() - start_time,
-                "strategy_explanation": "PARA: Semantic embedding retrieval with position-bias correction for middle-document recovery",
+                "strategy_explanation": "PARA Enhanced: Semantic chunking + adaptive position correction + multi-granularity retrieval + cross-encoder reranking + iterative middle probing + answer grounding",
                 "model_used": client.model,
                 "provider": provider,
-                "para_semantic_similarity": round(semantic_confidence, 4)
+                "para_semantic_similarity": round(semantic_confidence, 4),
+                "grounded": grounded,
             }
 
         else:  # combined (default and recommended)
