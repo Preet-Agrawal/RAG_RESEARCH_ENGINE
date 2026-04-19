@@ -13,7 +13,7 @@ from dataclasses import dataclass
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.core.llm_client import LLMClient
+from src.core.llm_client import LLMClient, ResilientLLMClient
 from dotenv import load_dotenv
 
 try:
@@ -623,27 +623,64 @@ You are given extracted facts from different parts of a document. Your job is to
         return prompts.get(strategy, prompts["baseline"])
 
 
-def _get_groq_client_with_fallback(temperature: float = 0.1) -> LLMClient:
-    """Try each Groq model in the fallback chain until one works."""
-    api_key = os.getenv("GROQ_API_KEY")
-    last_error = None
-    for model_name in GROQ_MODEL_FALLBACK:
-        try:
-            client = LLMClient(
-                provider="groq",
-                model=model_name,
-                temperature=temperature,
-                api_key=api_key
-            )
-            # Quick test to see if this model is rate-limited
-            client.generate("Hi", max_tokens=5)
-            return client
-        except Exception as e:
-            last_error = e
-            if "429" in str(e) or "rate_limit" in str(e).lower():
-                continue  # Try next model
-            raise  # Non-rate-limit error, re-raise
-    raise last_error  # All models rate-limited
+def _build_resilient_client(
+    primary: str = "groq", temperature: float = 0.1
+) -> ResilientLLMClient:
+    """
+    Build a resilient client that tries Groq and Gemini with instant fallback.
+
+    Behavior:
+      - Tries `primary` first (Groq by default)
+      - On rate-limit / quota error → instantly switches to the other provider
+      - Groq chain: llama-3.3-70b → llama-3.1-8b → gemma2-9b (all via one client each)
+      - Gemini chain: gemini-2.5-flash
+
+    No artificial wait — API rejects are handled at the application level.
+    """
+    groq_key = os.getenv("GROQ_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+    clients = []
+
+    def _add_groq():
+        if not groq_key:
+            return
+        for model_name in GROQ_MODEL_FALLBACK:
+            clients.append(LLMClient(
+                provider="groq", model=model_name,
+                temperature=temperature, api_key=groq_key,
+                rate_limit=0.0,
+            ))
+
+    def _add_gemini():
+        if not gemini_key:
+            return
+        for model_name in ["gemini-2.5-flash", "gemini-1.5-flash-8b"]:
+            clients.append(LLMClient(
+                provider="gemini", model=model_name,
+                temperature=temperature, api_key=gemini_key,
+                rate_limit=0.0,
+            ))
+
+    if primary == "gemini":
+        _add_gemini()
+        _add_groq()
+    else:
+        _add_groq()
+        _add_gemini()
+
+    if not clients:
+        raise RuntimeError(
+            "No LLM provider configured. Set GROQ_API_KEY or GEMINI_API_KEY."
+        )
+
+    return ResilientLLMClient(clients)
+
+
+# Backwards-compatible alias
+def _get_groq_client_with_fallback(temperature: float = 0.1):
+    """Kept for any external callers — now returns a resilient client."""
+    return _build_resilient_client(primary="groq", temperature=temperature)
 
 
 def summarize_document(pdf_text: str) -> Dict[str, Any]:
@@ -758,40 +795,42 @@ GROQ_MODEL_FALLBACK = [
 ]
 
 
-def get_llm_client(provider: str = "groq", model: str = None) -> LLMClient:
+def get_llm_client(provider: str = "groq", model: str = None):
     """
-    Get LLM client for specified provider.
-    Supports: groq, openai, anthropic
+    Get an LLM client with automatic cross-provider fallback.
+
+    For "groq" / "gemini" (the free tiers), returns a ResilientLLMClient
+    that tries the preferred provider first and instantly fails over to
+    the other if rate-limited/quota-exhausted — zero added latency.
+
+    For "openai" / "anthropic", returns a single direct LLMClient since
+    they are paid tiers with generous limits.
     """
-    provider_configs = {
-        "groq": {
-            "model": model or GROQ_MODEL_FALLBACK[0],
-            "api_key": os.getenv("GROQ_API_KEY"),
-            "provider": "groq"
-        },
-        "openai": {
-            "model": model or "gpt-4o",
-            "api_key": os.getenv("OPENAI_API_KEY"),
-            "provider": "openai"
-        },
-        "anthropic": {
-            "model": model or "claude-sonnet-4-20250514",
-            "api_key": os.getenv("ANTHROPIC_API_KEY"),
-            "provider": "anthropic"
-        }
-    }
+    # Cross-provider resilient clients for free tiers
+    if provider in ("groq", "gemini"):
+        return _build_resilient_client(primary=provider)
 
-    if provider == "groq" and not model:
-        # Use fallback chain for groq to handle rate limits
-        return _get_groq_client_with_fallback()
+    # Direct single-provider clients for paid APIs
+    if provider == "openai":
+        return LLMClient(
+            provider="openai",
+            model=model or "gpt-4o",
+            temperature=0.1,
+            api_key=os.getenv("OPENAI_API_KEY"),
+            rate_limit=0.0,
+        )
 
-    config = provider_configs.get(provider, provider_configs["groq"])
-    return LLMClient(
-        provider=config["provider"],
-        model=config["model"],
-        temperature=0.1,
-        api_key=config["api_key"]
-    )
+    if provider == "anthropic":
+        return LLMClient(
+            provider="anthropic",
+            model=model or "claude-sonnet-4-20250514",
+            temperature=0.1,
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            rate_limit=0.0,
+        )
+
+    # Default: resilient Groq-first
+    return _build_resilient_client(primary="groq")
 
 
 def answer_question(pdf_text: str, question: str, strategy: str = "combined",
@@ -1424,7 +1463,8 @@ def main():
             sys.exit(1)
         question = sys.argv[3]
         strategy = sys.argv[4] if len(sys.argv) > 4 else "combined"
-        result = answer_question(pdf_text, question, strategy)
+        provider = sys.argv[5] if len(sys.argv) > 5 else "groq"
+        result = answer_question(pdf_text, question, strategy, provider=provider)
     elif action == "compare":
         # Compare all strategies on the same question
         if len(sys.argv) < 4:

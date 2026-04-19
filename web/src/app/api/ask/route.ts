@@ -22,6 +22,7 @@ interface AskRequest {
   question: string;
   filename: string;
   strategy?: Strategy;
+  provider?: 'groq' | 'openai' | 'anthropic' | 'gemini';
 }
 
 interface ProcessResponse {
@@ -38,7 +39,15 @@ interface ProcessResponse {
 export async function POST(request: NextRequest) {
   try {
     const body: AskRequest = await request.json();
-    const { question, filename, strategy = 'combined' } = body;
+    const { question, filename, strategy = 'combined', provider = 'groq' } = body;
+
+    const validProviders = ['groq', 'openai', 'anthropic', 'gemini'];
+    if (!validProviders.includes(provider)) {
+      return NextResponse.json(
+        { error: `Invalid provider. Valid options: ${validProviders.join(', ')}` },
+        { status: 400 }
+      );
+    }
 
     if (!question || !filename) {
       return NextResponse.json(
@@ -76,9 +85,9 @@ export async function POST(request: NextRequest) {
     const uploadsDir = join(projectRoot, 'data', 'uploads');
     const filepath = join(uploadsDir, filename);
 
-    // Execute Python script with action, question, and strategy parameters
+    // Execute Python script with action, question, strategy, and provider parameters
     const escapedQuestion = question.replace(/"/g, '\\"').replace(/`/g, '\\`');
-    const command = `"${pythonBin}" "${pythonScript}" "${filepath}" "ask" "${escapedQuestion}" "${strategy}"`;
+    const command = `"${pythonBin}" "${pythonScript}" "${filepath}" "ask" "${escapedQuestion}" "${strategy}" "${provider}"`;
 
     try {
       const { stdout, stderr } = await execAsync(command, {

@@ -2,14 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme tokens ──────────────────────────────────────────────────────────
+   Colors are defined as CSS variables, switched by the `.dark` class on
+   <html>. Tailwind claude-* colors (defined in tailwind.config.ts) reference
+   these variables, so all existing classes auto-switch with the theme.
+*/
+
+:root {
+  /* ── Light theme (default) ──
+     Main area is pure white. Sidebar is a distinct warm gray so the two
+     surfaces feel like separate zones. Borders are visible but not harsh. */
+  --claude-bg: #ffffff;
+  --claude-surface: #f4f4f5;
+  --claude-surface-hover: #e9e9eb;
+  --claude-sidebar: #f0f0f2;
+  --claude-border: #dcdcdf;
+  --claude-border-light: #c4c4c8;
+  --claude-text: #18181b;
+  --claude-text-secondary: #52525b;
+  --claude-text-muted: #71717a;
+  --claude-accent: #b07747;
+  --claude-accent-hover: #c28558;
+  --claude-accent-soft: rgba(176, 119, 71, 0.12);
+  --claude-user-msg: transparent;
+  --claude-assistant-msg: #f7f7f8;
+  --claude-input: #ffffff;
+  --claude-input-border: #d4d4d8;
+
+  --scrollbar-thumb: #b4b4b8;
+  --scrollbar-thumb-hover: #8c8c90;
+  --shimmer-from: #e8e8eb;
+  --shimmer-mid: #dadade;
+
+  --select-bg: #ffffff;
+  --select-text: #18181b;
+
+  --sidebar-shadow: 1px 0 0 rgba(0, 0, 0, 0.04);
+}
+
+.dark {
+  /* ── Dark theme ── */
+  --claude-bg: #171717;
+  --claude-surface: #212121;
+  --claude-surface-hover: #2a2a2a;
+  --claude-sidebar: #0f0f0f;
+  --claude-border: #2e2e2e;
+  --claude-border-light: #3a3a3a;
+  --claude-text: #ececec;
+  --claude-text-secondary: #9b9b9b;
+  --claude-text-muted: #6b6b6b;
+  --claude-accent: #c4976b;
+  --claude-accent-hover: #d4a87b;
+  --claude-accent-soft: rgba(196, 151, 107, 0.12);
+  --claude-user-msg: #2b2b2b;
+  --claude-assistant-msg: #212121;
+  --claude-input: #2f2f2f;
+  --claude-input-border: #424242;
+
+  --scrollbar-thumb: #3a3a3a;
+  --scrollbar-thumb-hover: #4a4a4a;
+  --shimmer-from: #212121;
+  --shimmer-mid: #2a2a2a;
+
+  --select-bg: #212121;
+  --select-text: #ececec;
+
+  --sidebar-shadow: none;
+}
+
 @layer base {
+  html {
+    color-scheme: light dark;
+  }
+
   body {
     @apply bg-claude-bg text-claude-text antialiased;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: #3a3a3a transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -18,12 +91,12 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background-color: #3a3a3a;
+    background-color: var(--scrollbar-thumb);
     border-radius: 9999px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background-color: #4a4a4a;
+    background-color: var(--scrollbar-thumb-hover);
   }
 
   *::-webkit-scrollbar-track {
@@ -37,17 +110,9 @@
     animation: pulse-dot 1.4s infinite ease-in-out both;
   }
 
-  .typing-dot:nth-child(1) {
-    animation-delay: -0.32s;
-  }
-
-  .typing-dot:nth-child(2) {
-    animation-delay: -0.16s;
-  }
-
-  .typing-dot:nth-child(3) {
-    animation-delay: 0s;
-  }
+  .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+  .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+  .typing-dot:nth-child(3) { animation-delay: 0s; }
 }
 
 /* Smooth transitions for sidebar */
@@ -57,44 +122,26 @@
 
 /* Shimmer skeleton loading */
 .shimmer-bar {
-  background: linear-gradient(90deg, #212121 25%, #2a2a2a 50%, #212121 75%);
+  background: linear-gradient(90deg, var(--shimmer-from) 25%, var(--shimmer-mid) 50%, var(--shimmer-from) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
 /* Toast slide-in animation */
 @keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 /* Landing page animations */
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes gradientOrb {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.15;
-  }
-  50% {
-    transform: scale(1.3);
-    opacity: 0.25;
-  }
+  0%, 100% { transform: scale(1); opacity: 0.15; }
+  50% { transform: scale(1.3); opacity: 0.25; }
 }
 
 @keyframes typewriter {
@@ -125,10 +172,12 @@
   padding: 0;
   border-radius: 0;
   font-size: 0.875rem;
-  color: #e6edf3;
 }
 
-/* Syntax highlighting - GitHub Dark style */
+/* Syntax highlighting — dark default */
+.markdown-body pre code {
+  color: #e6edf3;
+}
 .markdown-body pre code .hljs-keyword { color: #ff7b72; }
 .markdown-body pre code .hljs-string { color: #a5d6ff; }
 .markdown-body pre code .hljs-number { color: #79c0ff; }
@@ -145,8 +194,20 @@
 .markdown-body pre code .hljs-selector-class { color: #d2a8ff; }
 .markdown-body pre code .hljs-literal { color: #79c0ff; }
 
-/* Select styling */
+/* Light mode overrides for syntax highlighting */
+:root:not(.dark) .markdown-body pre code { color: #24292f; }
+:root:not(.dark) .markdown-body pre code .hljs-keyword { color: #cf222e; }
+:root:not(.dark) .markdown-body pre code .hljs-string { color: #0a3069; }
+:root:not(.dark) .markdown-body pre code .hljs-number { color: #0550ae; }
+:root:not(.dark) .markdown-body pre code .hljs-comment { color: #6e7781; }
+:root:not(.dark) .markdown-body pre code .hljs-function { color: #8250df; }
+:root:not(.dark) .markdown-body pre code .hljs-title { color: #8250df; }
+:root:not(.dark) .markdown-body pre code .hljs-built_in { color: #953800; }
+:root:not(.dark) .markdown-body pre code .hljs-type { color: #953800; }
+:root:not(.dark) .markdown-body pre code .hljs-attr { color: #0550ae; }
+
+/* Select styling — theme-aware */
 select option {
-  background-color: #212121;
-  color: #ececec;
+  background-color: var(--select-bg);
+  color: var(--select-text);
 }

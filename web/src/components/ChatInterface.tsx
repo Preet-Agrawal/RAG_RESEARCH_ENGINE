@@ -216,7 +216,7 @@ export default function ChatInterface({
         ) : (
           <div className="pb-4">
             {messages.map((message) => (
-              <div key={message.id} className={`group py-5 px-4 ${message.role === 'user' ? 'bg-transparent' : 'bg-claude-surface/40'}`}>
+              <div key={message.id} className={`group py-5 px-4 ${message.role === 'user' ? 'bg-transparent' : 'bg-claude-assistant-msg'}`}>
                 <div className="max-w-chat mx-auto flex gap-4">
                   <div className="flex-shrink-0 mt-0.5">
                     {message.role === 'assistant' ? (
@@ -270,7 +270,7 @@ export default function ChatInterface({
             ))}
 
             {isProcessing && (
-              <div className="py-5 px-4 bg-claude-surface/40">
+              <div className="py-5 px-4 bg-claude-assistant-msg">
                 <div className="max-w-chat mx-auto flex gap-4">
                   <div className="flex-shrink-0 mt-0.5">
                     <div className="w-7 h-7 rounded-full bg-gradient-to-br from-claude-accent to-amber-600 flex items-center justify-center">
@@ -290,7 +290,7 @@ export default function ChatInterface({
             )}
 
             {isLoading && !isProcessing && (
-              <div className="py-5 px-4 bg-claude-surface/40">
+              <div className="py-5 px-4 bg-claude-assistant-msg">
                 <div className="max-w-chat mx-auto flex gap-4">
                   <div className="flex-shrink-0 mt-0.5">
                     <div className="w-7 h-7 rounded-full bg-gradient-to-br from-claude-accent to-amber-600 flex items-center justify-center">

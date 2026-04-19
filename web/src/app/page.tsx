@@ -5,6 +5,7 @@ import PDFUploader from '@/components/PDFUploader';
 import ChatInterface from '@/components/ChatInterface';
 import ChatHistory from '@/components/ChatHistory';
 import EvaluationDashboard from '@/components/EvaluationDashboard';
+import ThemeToggle from '@/components/ThemeToggle';
 import { useToast } from '@/components/Toast';
 import {
   Beaker, FileText, GitCompare, FlaskConical,
@@ -389,7 +390,7 @@ export default function Home() {
     <div className="h-screen flex overflow-hidden bg-claude-bg">
       {/* Sidebar */}
       <aside
-        className={`sidebar-transition flex flex-col bg-claude-sidebar border-r border-claude-border ${
+        className={`sidebar-transition flex flex-col bg-claude-sidebar border-r border-claude-border shadow-[var(--sidebar-shadow)] ${
           sidebarOpen ? 'w-72' : 'w-0'
         } overflow-hidden flex-shrink-0`}
       >
@@ -480,14 +481,15 @@ export default function Home() {
           </div>
 
           {/* Sidebar Footer */}
-          <div className="p-3 border-t border-claude-border">
-            <div className="flex items-center gap-2 px-2">
+          <div className="p-3 border-t border-claude-border space-y-1">
+            <ThemeToggle />
+            <div className="flex items-center gap-2 px-2 pt-2">
               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-claude-accent to-amber-600 flex items-center justify-center">
                 <Beaker className="w-3.5 h-3.5 text-white" />
               </div>
               <div>
                 <p className="text-xs font-medium text-claude-text">RAG Research Engine</p>
-                <p className="text-[10px] text-claude-text-muted">Groq Llama 3.3 70B</p>
+                <p className="text-[10px] text-claude-text-muted">Groq + Gemini auto-fallback</p>
               </div>
             </div>
           </div>

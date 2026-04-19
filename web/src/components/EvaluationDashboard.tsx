@@ -121,33 +121,33 @@ export default function EvaluationDashboard({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#1a1a2e] border border-gray-700 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-claude-surface border border-claude-border rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-claude-border">
           <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <h2 className="text-xl font-bold text-claude-text flex items-center gap-2">
               <Target size={22} className="text-emerald-400" />
               Lost-in-the-Middle Recovery Analysis
             </h2>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-claude-text-secondary mt-1">
               Tests if each strategy can find a hidden fact placed at different positions in your document
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white p-1">
+          <button onClick={onClose} className="text-claude-text-secondary hover:text-claude-text p-1">
             <X size={20} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* How it works */}
-          <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700">
-            <h3 className="text-sm font-semibold text-gray-300 mb-2">How this works</h3>
-            <div className="flex items-center gap-3 text-xs text-gray-400">
-              <span className="bg-gray-700 px-2 py-1 rounded">1. Insert a hidden fact at 7 positions (10%-90%)</span>
+          <div className="bg-claude-surface rounded-xl p-4 border border-claude-border">
+            <h3 className="text-sm font-semibold text-claude-text mb-2">How this works</h3>
+            <div className="flex items-center gap-3 text-xs text-claude-text-secondary">
+              <span className="bg-claude-surface-hover px-2 py-1 rounded">1. Insert a hidden fact at 7 positions (10%-90%)</span>
               <ArrowRight size={14} />
-              <span className="bg-gray-700 px-2 py-1 rounded">2. Ask each strategy to find it</span>
+              <span className="bg-claude-surface-hover px-2 py-1 rounded">2. Ask each strategy to find it</span>
               <ArrowRight size={14} />
-              <span className="bg-gray-700 px-2 py-1 rounded">3. See who recovers the middle content</span>
+              <span className="bg-claude-surface-hover px-2 py-1 rounded">3. See who recovers the middle content</span>
             </div>
           </div>
 
@@ -155,7 +155,7 @@ export default function EvaluationDashboard({
           <button
             onClick={runNeedleTest}
             disabled={isRunning || !filename}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-600 text-claude-text px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
           >
             {isRunning ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
             {isRunning ? 'Running... (this takes ~10 min)' : 'Run Position Recovery Test'}
@@ -195,11 +195,11 @@ export default function EvaluationDashboard({
               </div>
 
               {/* U-Shaped Attention Curve */}
-              <div className="bg-gray-800/40 rounded-xl p-5 border border-gray-700">
-                <h3 className="text-lg font-semibold text-white mb-1">
+              <div className="bg-claude-surface rounded-xl p-5 border border-claude-border">
+                <h3 className="text-lg font-semibold text-claude-text mb-1">
                   Attention Curve — Recovery by Document Position
                 </h3>
-                <p className="text-xs text-gray-400 mb-4">
+                <p className="text-xs text-claude-text-secondary mb-4">
                   The red &quot;dead zone&quot; (33-67%) is where LLMs lose information. Our strategies recover it.
                 </p>
                 <ResponsiveContainer width="100%" height={350}>
@@ -230,11 +230,11 @@ export default function EvaluationDashboard({
               </div>
 
               {/* Position-by-Position Table */}
-              <div className="bg-gray-800/40 rounded-xl p-5 border border-gray-700">
-                <h3 className="text-lg font-semibold text-white mb-4">Position-by-Position Results</h3>
+              <div className="bg-claude-surface rounded-xl p-5 border border-claude-border">
+                <h3 className="text-lg font-semibold text-claude-text mb-4">Position-by-Position Results</h3>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-700 text-gray-400">
+                    <tr className="border-b border-claude-border text-claude-text-secondary">
                       <th className="text-left p-2">Position</th>
                       <th className="text-left p-2">Zone</th>
                       <th className="text-center p-2">Baseline</th>
@@ -245,8 +245,8 @@ export default function EvaluationDashboard({
                   </thead>
                   <tbody>
                     {results.results.map((r, i) => (
-                      <tr key={i} className="border-b border-gray-800">
-                        <td className="p-2 text-gray-300 font-mono">{r.positionPercent}%</td>
+                      <tr key={i} className="border-b border-claude-border">
+                        <td className="p-2 text-claude-text font-mono">{r.positionPercent}%</td>
                         <td className="p-2">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
                             r.positionZone === 'middle'
@@ -300,11 +300,11 @@ function ScoreCard({ label, value, color, description }: {
   };
   return (
     <div className={`bg-gradient-to-br ${colorMap[color]} border rounded-xl p-4`}>
-      <p className="text-xs text-gray-400">{label}</p>
+      <p className="text-xs text-claude-text-secondary">{label}</p>
       <p className={`text-3xl font-bold mt-1 ${colorMap[color].split(' ').pop()}`}>
         {value.toFixed(0)}%
       </p>
-      <p className="text-xs text-gray-500 mt-1">{description}</p>
+      <p className="text-xs text-claude-text-muted mt-1">{description}</p>
     </div>
   );
 }

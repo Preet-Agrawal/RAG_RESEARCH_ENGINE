@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss'
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -10,22 +11,24 @@ const config: Config = {
     extend: {
       colors: {
         claude: {
-          bg: '#171717',
-          surface: '#212121',
-          'surface-hover': '#2a2a2a',
-          sidebar: '#171717',
-          border: '#2e2e2e',
-          'border-light': '#3a3a3a',
-          text: '#ececec',
-          'text-secondary': '#9b9b9b',
-          'text-muted': '#6b6b6b',
-          accent: '#c4976b',
-          'accent-hover': '#d4a87b',
-          'accent-soft': 'rgba(196, 151, 107, 0.12)',
-          'user-msg': '#2b2b2b',
-          'assistant-msg': '#212121',
-          input: '#2f2f2f',
-          'input-border': '#424242',
+          // All claude-* colors map to CSS variables in globals.css
+          // Values swap automatically when `.dark` is toggled on <html>
+          bg: 'var(--claude-bg)',
+          surface: 'var(--claude-surface)',
+          'surface-hover': 'var(--claude-surface-hover)',
+          sidebar: 'var(--claude-sidebar)',
+          border: 'var(--claude-border)',
+          'border-light': 'var(--claude-border-light)',
+          text: 'var(--claude-text)',
+          'text-secondary': 'var(--claude-text-secondary)',
+          'text-muted': 'var(--claude-text-muted)',
+          accent: 'var(--claude-accent)',
+          'accent-hover': 'var(--claude-accent-hover)',
+          'accent-soft': 'var(--claude-accent-soft)',
+          'user-msg': 'var(--claude-user-msg)',
+          'assistant-msg': 'var(--claude-assistant-msg)',
+          input: 'var(--claude-input)',
+          'input-border': 'var(--claude-input-border)',
         },
       },
       maxWidth: {
