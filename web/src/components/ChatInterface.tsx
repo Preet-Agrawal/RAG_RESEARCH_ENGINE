@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Loader2, Zap, Clock, Layers, ChevronDown, Beaker, User, Copy, Check, ArrowDown } from 'lucide-react';
+import { Send, Loader2, Zap, Clock, Layers, ChevronDown, User, Copy, Check, ArrowDown } from 'lucide-react';
 import type { Message, Strategy, ChunkSummary } from '@/types';
 import { STRATEGIES } from '@/types';
 import DocumentOverview from './DocumentOverview';
 import MarkdownRenderer from './MarkdownRenderer';
 import SuggestedQuestions from './SuggestedQuestions';
+import Logo from './Logo';
 
 interface SummaryData {
   chunkSummaries: ChunkSummary[];
@@ -204,8 +205,8 @@ export default function ChatInterface({
         {messages.length === 0 && !isProcessing ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center max-w-md px-6">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-claude-accent/20 to-amber-600/20 flex items-center justify-center mx-auto mb-4">
-                <Beaker className="w-6 h-6 text-claude-accent" />
+              <div className="flex justify-center mb-4">
+                <Logo size={48} />
               </div>
               <h2 className="text-lg font-semibold text-claude-text mb-2">Ask about your document</h2>
               <p className="text-sm text-claude-text-muted leading-relaxed">
@@ -220,9 +221,7 @@ export default function ChatInterface({
                 <div className="max-w-chat mx-auto flex gap-4">
                   <div className="flex-shrink-0 mt-0.5">
                     {message.role === 'assistant' ? (
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-claude-accent to-amber-600 flex items-center justify-center">
-                        <Beaker className="w-3.5 h-3.5 text-white" />
-                      </div>
+                      <Logo size={28} className="flex-shrink-0" />
                     ) : (
                       <div className="w-7 h-7 rounded-full bg-claude-border-light flex items-center justify-center">
                         <User className="w-3.5 h-3.5 text-claude-text-secondary" />
@@ -273,9 +272,7 @@ export default function ChatInterface({
               <div className="py-5 px-4 bg-claude-assistant-msg">
                 <div className="max-w-chat mx-auto flex gap-4">
                   <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-claude-accent to-amber-600 flex items-center justify-center">
-                      <Beaker className="w-3.5 h-3.5 text-white" />
-                    </div>
+                    <Logo size={28} className="flex-shrink-0" />
                   </div>
                   <div className="flex-1">
                     <p className="text-xs font-medium text-claude-text-secondary mb-2.5">RAG Engine</p>
@@ -293,9 +290,7 @@ export default function ChatInterface({
               <div className="py-5 px-4 bg-claude-assistant-msg">
                 <div className="max-w-chat mx-auto flex gap-4">
                   <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-claude-accent to-amber-600 flex items-center justify-center">
-                      <Beaker className="w-3.5 h-3.5 text-white" />
-                    </div>
+                    <Logo size={28} className="flex-shrink-0" />
                   </div>
                   <div className="flex-1">
                     <p className="text-xs font-medium text-claude-text-secondary mb-2">RAG Engine</p>
@@ -353,7 +348,7 @@ export default function ChatInterface({
                 <button
                   type="submit"
                   disabled={!input.trim() || isLoading || disabled}
-                  className="p-2 rounded-xl bg-claude-text text-claude-bg hover:bg-white transition-all duration-150 disabled:opacity-20 disabled:cursor-not-allowed"
+                  className="p-2 rounded-xl bg-claude-text text-claude-bg hover:opacity-80 transition-all duration-150 disabled:opacity-20 disabled:cursor-not-allowed"
                 >
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>

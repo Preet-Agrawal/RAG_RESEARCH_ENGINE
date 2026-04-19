@@ -6,9 +6,10 @@ import ChatInterface from '@/components/ChatInterface';
 import ChatHistory from '@/components/ChatHistory';
 import EvaluationDashboard from '@/components/EvaluationDashboard';
 import ThemeToggle from '@/components/ThemeToggle';
+import Logo from '@/components/Logo';
 import { useToast } from '@/components/Toast';
 import {
-  Beaker, FileText, GitCompare, FlaskConical,
+  FileText, GitCompare, FlaskConical,
   X, BarChart3, PanelLeftClose, PanelLeft, Plus, Trash2, Download,
   Layers, Search, Target
 } from 'lucide-react';
@@ -483,10 +484,8 @@ export default function Home() {
           {/* Sidebar Footer */}
           <div className="p-3 border-t border-claude-border space-y-1">
             <ThemeToggle />
-            <div className="flex items-center gap-2 px-2 pt-2">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-claude-accent to-amber-600 flex items-center justify-center">
-                <Beaker className="w-3.5 h-3.5 text-white" />
-              </div>
+            <div className="flex items-center gap-2.5 px-2 pt-2">
+              <Logo size={24} />
               <div>
                 <p className="text-xs font-medium text-claude-text">RAG Research Engine</p>
                 <p className="text-[10px] text-claude-text-muted">Groq + Gemini auto-fallback</p>
@@ -593,6 +592,9 @@ export default function Home() {
                       <span className="text-xs text-claude-text-secondary">Powered by Groq Llama 3.3 70B</span>
                     </div>
 
+                    <div className="flex justify-center mb-5">
+                      <Logo size={64} className="drop-shadow-lg" />
+                    </div>
                     <h1 className="text-4xl font-bold text-claude-text mb-3 tracking-tight">
                       RAG Research Engine
                     </h1>

@@ -10,7 +10,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: 'RAG Research Engine',
-  description: 'Testing "Lost in the Middle" Phenomenon in RAG Systems',
+  description: 'Position-Aware Retrieval Augmentation for Long-Context LLMs',
+  icons: {
+    icon: '/icon.svg',
+    apple: '/apple-icon.svg',
+  },
 };
 
 // Inline script to read theme from localStorage and apply it to <html>

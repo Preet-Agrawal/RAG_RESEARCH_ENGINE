@@ -637,34 +637,39 @@ All providers are accessed through a unified `LLMClient` class with rate limitin
 
 ## 10. What Makes This Research-Worthy
 
-### 10.1 Novel Contribution: PARA (6 innovations)
+### 10.1 What's Actually Novel: The sin(π·p) Correction Term
 
-**No existing work combines all of these into a single retrieval framework:**
+**Honest framing.** PARA has seven components. **One is novel. Six are prior art that we integrate as a retrieval testbed.** This matters because reviewers will immediately spot over-claiming.
 
-| Innovation | What's New | Why It Matters |
-|-----------|-----------|----------------|
-| Sinusoidal position correction | First to mathematically model U-shaped attention with sin(pi*position) | Directly counteracts the documented attention gap |
-| Adaptive gamma | Position correction scales with document length | Longer docs get stronger correction — matches empirical findings |
-| Semantic chunking | Topic-boundary splitting via embedding similarity | Preserves fact coherence — no broken sentences |
-| Multi-granularity retrieval | Simultaneous sentence + paragraph + section retrieval | Captures both precise facts and surrounding context |
-| Cross-encoder reranking | Two-stage retrieval: fast bi-encoder → accurate cross-encoder | Higher precision in final retrieved set |
-| Iterative middle probing | Self-correcting two-pass retrieval for low-confidence answers | Second chance to recover missed middle content |
-| Answer grounding check | Verify answer is supported by retrieved chunks | Prevents hallucination from masquerading as recovery |
+**The novel contribution:**
+- **Sinusoidal position-bias correction** (§3.1–3.2): `γ · sin(π · position)` added to the retrieval score. To our knowledge, no prior retrieval method adds an explicit, closed-form position-bias correction whose shape matches the inverse of the empirical Lost-in-the-Middle attention curve.
+- **Adaptive γ scaling** (§3.6): `γ = 0.3 · log₁₀(n_chunks)`. Scales correction strength with document length.
 
-### 10.2 Comprehensive Strategy Comparison
+**The six prior-art components (integrated as testbed):**
 
-This project implements **11 different strategies** for the same problem, enabling:
-- Side-by-side comparison on the same document and query
-- Identification of which approach works best under different conditions
-- Quantitative evidence through needle-in-the-haystack benchmarking
+| Component | Prior Art | Role in PARA |
+|-----------|-----------|--------------|
+| Semantic chunking (§3.7) | Kamradt (2023) semantic chunker; Sarthi et al. RAPTOR (ICLR 2024) | Chunking backend |
+| Multi-granularity retrieval (§3.8) | Sarthi et al. RAPTOR (ICLR 2024); ProposalQA / hierarchical RAG | Retrieval unit selection |
+| Cross-encoder reranking (§3.9) | Reimers & Gurevych SBERT (EMNLP 2019); Nogueira et al. monoBERT (2020); ms-marco-MiniLM model card | Second-stage rerank |
+| Iterative retrieval (§3.10) | Asai et al. Self-RAG (ICLR 2024); Yan et al. CRAG (2024) | Low-confidence re-probe |
+| Answer grounding (§3.11) | Zheng et al. LLM-as-judge (NeurIPS 2023); Es et al. RAGAS (2024) | Confidence calibration |
+| Bi-encoder semantic retrieval | Karpukhin et al. DPR (EMNLP 2020); Reimers & Gurevych (2019) | Base retrieval |
 
-### 10.3 Practical End-to-End System
+We cite all of these in §2 (Related Work). Our contribution claim is narrow: **the sin(π·p) term, when added to an otherwise-standard RAG pipeline, measurably reduces middle-position retrieval failures.** Everything else in the pipeline is the competitive baseline we build on top of.
 
-Unlike papers that only evaluate on synthetic data, this project provides:
-- A working web interface for real PDF documents
-- Real-time strategy selection and comparison
-- Visual demonstration of the U-shaped attention curve
-- Support for multiple LLM providers (showing the problem is model-general)
+### 10.2 Defensible Claim (Moderate Framing)
+
+> *"We propose a position-aware retrieval score that augments bi-encoder similarity with a sinusoidal position-bias correction, γ·sin(π·p), and show that adding this single term to otherwise-standard dense retrieval improves middle-document retrieval on the NaturalQuestions-Open Lost-in-the-Middle benchmark of Liu et al. (2024)."*
+
+This claim is defensible if (and only if) we run the experiments in §11 below. If we don't, fall back to the **conservative framing**: a case-study tech report at a workshop.
+
+### 10.3 Practical System
+
+Orthogonal to the research claim, we provide a working web UI that:
+- Lets practitioners try all 11 strategies on real PDFs
+- Visualizes the U-shaped attention curve per document
+- Supports multi-provider LLM access (Groq, Gemini, OpenAI, Anthropic) with automatic failover — useful as a reference implementation regardless of the research contribution.
 
 ---
 
@@ -692,62 +697,58 @@ Abstract:
 
 3. Method
    3.1 Problem Formulation
-       - U-shaped attention as function of position
+       - U-shaped attention as function of document position p ∈ [0,1]
        - Why retrieval scoring should be position-aware
-   3.2 PARA: Position-Aware Retrieval Augmentation
-       - Semantic embedding (SentenceTransformer)
-       - Sinusoidal position-bias correction (formula, intuition)
-       - Adaptive gamma (scaling with document length)
-   3.3 Semantic Chunking
-       - Topic-boundary detection via embedding similarity
-       - Comparison with fixed-size chunking
-   3.4 Multi-Granularity Retrieval
-       - Sentence + Paragraph + Section levels
-       - Merge and deduplication strategy
-   3.5 Cross-Encoder Reranking
-       - Two-stage pipeline: bi-encoder → cross-encoder
-       - Score blending (60/40)
-   3.6 Iterative Middle Probing
-       - Confidence-triggered re-probe of middle sections
-       - Answer merging
-   3.7 Answer Grounding Verification
-       - LLM-based fact-checking against source
-       - Confidence adjustment
-   3.8 Baseline Strategies (10 alternatives)
-       - Brief description of each for comparison
+   3.2 Position-Aware Retrieval Score (the contribution)
+       - Standard bi-encoder similarity baseline
+       - Sinusoidal position-bias correction: γ · sin(π·p)
+       - Why sin: zero at edges (0,1), single peak at 0.5, smooth, 1 hyperparam
+       - Adaptive γ: γ = 0.3 · log₁₀(n_chunks)
+   3.3 Pipeline Integration (the testbed)
+       - We integrate the correction term into a standard RAG pipeline:
+         semantic chunking (Kamradt 2023, Sarthi et al. 2024),
+         multi-granularity retrieval (RAPTOR 2024),
+         cross-encoder reranking (Reimers & Gurevych 2019; Nogueira 2020),
+         iterative refinement (Self-RAG 2024; CRAG 2024),
+         grounding verification (Zheng 2023; RAGAS 2024)
+       - Each component is cited as prior art; they serve as the competitive
+         baseline on top of which we measure the correction's marginal effect.
 
 4. Experimental Setup
-   4.1 Needle-in-the-Haystack Protocol
-       - Insertion at 7 positions (10%-90%)
-       - Binary detection metric
-   4.2 Real Document QA
-       - PDF upload and question answering
-       - Confidence scoring (semantic vs heuristic)
-   4.3 Models Tested
-       - Llama 3.3 70B, GPT-4o, Claude (showing generality)
+   4.1 Primary: Liu et al. 2024 NQ-Open Replication
+       - Multi-document QA with 10, 20, 30 documents per query
+       - 500 queries per condition from NaturalQuestions-Open
+       - Gold-document placed at positions {1, 5, 10, 15, 20, ...}
+       - Metrics: Exact Match, token F1, best-answer position found
+   4.2 Secondary: Needle-in-the-Haystack Diagnostic
+       - 21 positions (5%, 10%, ..., 95%) for finer-grained analysis
+       - Binary found/not-found
+   4.3 Models
+       - Primary: Llama-3.3-70B (Groq), Gemini-2.5-Flash
+       - Cross-model: GPT-4o, Claude (for generality claim)
 
 5. Results
-   5.1 U-Shaped Attention Curve (Figure 1)
-       - Baseline shows clear middle-content loss
-       - PARA flattens the curve
-   5.2 Strategy Comparison (Table 1)
-       - All 11 strategies on same queries
-       - PARA consistently top performer
-   5.3 Component Analysis (Table 2)
-       - Impact of each PARA component:
-         semantic chunking, adaptive gamma, multi-granularity,
-         cross-encoder, iterative probing, grounding
-   5.4 Position Recovery Analysis
-       - Dead zone identification
-       - Recovery rate per strategy
+   5.1 Main Result — Table 1 (NQ-Open Multi-Doc QA)
+       - F1 and EM for baseline vs baseline+sin(π·p), across 10/20/30 docs
+       - Gain attributed to the correction term alone
+   5.2 Why sin(π·p)? — Table 3 (Correction Function Ablation)
+       - sin vs Gaussian vs triangle vs step vs none
+       - Addresses reviewer objection 2 (§11a)
+       - Produced by scripts/run_ablation.py --experiment correction_function
+   5.3 Is it really the correction? — Table 2 (2×2 Factorial)
+       - semantic-only / +position / +cross-encoder / +both
+       - Marginal gain of position correction with and without cross-encoder
+       - Addresses reviewer objection 3 (§11a)
+       - Produced by scripts/run_ablation.py --experiment cross_encoder
+   5.4 Attention Curve Diagnostic — Figure 2
+       - Per-position accuracy, baseline vs +correction
+       - Shows where the correction helps most (middle positions)
 
 6. Analysis
-   6.1 Why sinusoidal correction works
-   6.2 Semantic vs keyword relevance
-   6.3 Adaptive gamma vs fixed gamma
-   6.4 When multi-granularity helps vs single-level
-   6.5 Grounding check: preventing false recovery
-   6.6 Limitations and failure cases
+   6.1 Where the gain comes from (breakdown by position zone)
+   6.2 When the correction hurts (edge-heavy queries, small documents)
+   6.3 Sensitivity to γ (gamma sweep, fixed vs adaptive)
+   6.4 Failure modes and limitations
 
 7. Conclusion
    - PARA addresses position-blindness in RAG
@@ -759,15 +760,114 @@ References
 
 ---
 
+## 11a. Anticipated Reviewer Objections & Rebuttals
+
+These are the objections we expect and the evidence we need to defend against each. Items marked **[MUST RUN]** are experiments that still need to be executed.
+
+### Objection 1 — "Only the sin(π·p) term is novel. The rest is engineering."
+
+**Rebuttal.** We are explicit throughout the paper that the novel contribution is the sinusoidal position-bias correction (§3.1–3.2) and its adaptive amplitude (§3.6). The remaining five components are established techniques (Kamradt 2023; Sarthi et al. 2024; Reimers & Gurevych 2019; Asai et al. 2024; Zheng et al. 2023 — see §2) included as the retrieval testbed. We are not claiming to invent semantic chunking, cross-encoder reranking, or RAG self-correction; we are claiming that adding one well-motivated term to this standard stack measurably improves middle-document retrieval.
+
+### Objection 2 — "Why sin(π·p) and not a Gaussian, step, or learned correction?"
+
+**Rebuttal.** Table 3 (correction-function ablation) reports five correction shapes on the same benchmark: sin(π·p), Gaussian(μ=0.5, σ=0.2), triangle, step(0.25≤p≤0.75), and none. All three smooth corrections (sin, Gaussian, triangle) reduce middle-position failures. sin is within X F1 of the best while having three properties we want: zero at p∈{0,1} so edge chunks are unaffected, single smooth peak at p=0.5 matching Liu et al. (2024) Figure 3, and one hyperparameter. A learned correction is a natural extension we discuss in §6. **[MUST RUN]** `scripts/run_ablation.py --experiment correction_function`
+
+### Objection 3 — "The cross-encoder is doing all the work."
+
+**Rebuttal.** Table 2 (cross-encoder × position factorial) reports four configurations: (i) semantic-only baseline, (ii) +position correction, (iii) +cross-encoder, (iv) +both (full PARA). The marginal gain from adding position correction is X points in (ii) vs (i) and Y points in (iv) vs (iii). The effect is smaller but nonzero when the cross-encoder is present, showing the two mechanisms address different failure modes. **[MUST RUN]** `scripts/run_ablation.py --experiment cross_encoder`
+
+### Objection 4 — "7 needle positions on 1 document is anecdotal."
+
+**Rebuttal.** Our primary evaluation (§4.1) is exactly Liu et al. (2024)'s multi-document QA setup on NaturalQuestions-Open with 10, 20, and 30-document conditions, 500 queries per condition. The single-needle probe (§4.2) is retained as a secondary diagnostic because it enables finer per-position analysis (21 positions vs Liu's 10). **[MUST RUN]** — this is the Stage 2(a) experiment.
+
+### Objection 5 — "Relationship to Self-RAG, CRAG, LongRAG?"
+
+**Rebuttal.** Self-RAG and CRAG address retrieval quality via learned critics and query reformulation respectively; neither models document position. LongRAG (Jiang et al. 2024) uses a long-context reader with coarse retrieval units but does not correct for position bias within retrieved chunks. Our contribution is orthogonal — the sin(π·p) correction can be applied on top of any of these methods. §2 covers this explicitly.
+
+---
+
+## 11b. Ablation Protocol
+
+All ablations are reproducible via `scripts/run_ablation.py`. The script exposes three pre-defined experiments:
+
+### (A) Correction-function ablation (Objection 2)
+
+```bash
+python scripts/run_ablation.py \
+    --pdf data/uploads/paper.pdf \
+    --experiment correction_function \
+    --positions 0.05,0.15,0.25,0.35,0.45,0.5,0.55,0.65,0.75,0.85,0.95 \
+    --num-runs 3 \
+    --provider groq
+```
+
+Compares **sin, Gaussian, triangle, step, none** with all other PARA components held constant. Reports needle-found rate per position, overall accuracy, and middle-zone accuracy. Total LLM calls: 5 configs × 11 positions × 3 runs = 165.
+
+### (B) Cross-encoder 2×2 factorial (Objection 3)
+
+```bash
+python scripts/run_ablation.py \
+    --pdf data/uploads/paper.pdf \
+    --experiment cross_encoder \
+    --num-runs 3 \
+    --provider groq
+```
+
+Four configs: semantic-only, +position, +cross-encoder, +both. Isolates marginal contribution of the correction term with and without cross-encoder reranking.
+
+### (C) Component stack ablation (for Table 2)
+
+```bash
+python scripts/run_ablation.py \
+    --pdf data/uploads/paper.pdf \
+    --experiment component_stack \
+    --num-runs 3 \
+    --provider groq
+```
+
+Five incremental configs: semantic-only → +multi-granularity → +cross-encoder → +fixed-γ correction → +adaptive-γ (full PARA). Shows the marginal F1 contribution of each component in turn.
+
+### Runtime budget (Groq free tier, 30 req/min)
+
+| Experiment | LLM calls | Est. time |
+|-----------|-----------|-----------|
+| (A) correction function, 11 pos × 5 cfg × 3 runs | 165 | ~12 min |
+| (B) cross-encoder 2×2, 7 pos × 4 cfg × 3 runs | 84 | ~6 min |
+| (C) component stack, 7 pos × 5 cfg × 3 runs | 105 | ~8 min |
+
+With auto-fallback to Gemini, effective throughput is ~45 req/min. If Groq is unavailable, Gemini 2.5 Flash handles the full load at roughly the same rate.
+
+---
+
 ## 12. Key References
 
-1. **Liu et al. (2023)** — "Lost in the Middle: How Language Models Use Long Contexts" — The foundational paper documenting the U-shaped attention pattern. Tests on multi-document QA and key-value retrieval tasks.
+### Primary motivation
+1. **Liu, N. F. et al. (2024).** *Lost in the Middle: How Language Models Use Long Contexts.* TACL 12:157–173. The foundational U-shaped attention paper. Motivates the sin(π·p) correction.
 
-2. **Lewis et al. (2020)** — "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" — Original RAG framework combining retrieval with generation.
+### Retrieval-Augmented Generation
+2. **Lewis, P. et al. (2020).** *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.* NeurIPS 2020. Original RAG framework.
+3. **Karpukhin, V. et al. (2020).** *Dense Passage Retrieval for Open-Domain Question Answering.* EMNLP 2020. DPR — the bi-encoder dense retrieval baseline PARA builds on.
 
-3. **Reimers & Gurevych (2019)** — "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks" — The basis for sentence-transformers used in PARA's embedding step.
+### Components we use as prior art (MUST be cited in §2 Related Work)
+4. **Reimers, N. & Gurevych, I. (2019).** *Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks.* EMNLP 2019. The `sentence-transformers` backbone for all-MiniLM-L6-v2.
+5. **Nogueira, R. et al. (2020).** *Passage Re-ranking with BERT.* arXiv:1901.04085. Cross-encoder reranking (the two-stage retrieval pattern PARA uses).
+6. **Kamradt, G. (2023).** *5 Levels Of Text Splitting.* Public notebook / LlamaIndex docs. The semantic-chunking technique PARA uses for topic-boundary splits.
+7. **Sarthi, P. et al. (2024).** *RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval.* ICLR 2024. Multi-granularity / hierarchical retrieval.
+8. **Asai, A. et al. (2024).** *Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection.* ICLR 2024. Self-correcting RAG (related to PARA's iterative middle probing).
+9. **Yan, S.-Q. et al. (2024).** *Corrective Retrieval Augmented Generation.* arXiv:2401.15884. CRAG — another iterative/self-correcting RAG method we should contrast against.
+10. **Jiang, Z. et al. (2024).** *LongRAG: Enhancing Retrieval-Augmented Generation with Long-context LLMs.* arXiv:2406.15319. Related long-context RAG; orthogonal contribution to PARA.
 
-4. **Pang et al. (2022)** — "QuALITY: Question Answering with Long Input Texts, Yes!" — Long-document QA benchmark.
+### Evaluation & benchmarks
+11. **Kwiatkowski, T. et al. (2019).** *Natural Questions: a Benchmark for Question Answering Research.* TACL 7:453–466. NQ-Open — the benchmark Liu et al. (2024) use and which PARA must replicate.
+12. **Pang, R. Y. et al. (2022).** *QuALITY: Question Answering with Long Input Texts, Yes!* NAACL 2022. Long-document multiple-choice QA benchmark.
+13. **Es, S. et al. (2024).** *RAGAS: Automated Evaluation of Retrieval Augmented Generation.* EACL 2024. LLM-as-judge evaluation for RAG (PARA's grounding check is a simplified variant).
+14. **Zheng, L. et al. (2023).** *Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena.* NeurIPS 2023. LLM-as-judge methodology.
+
+### Long-context architecture (orthogonal but relevant)
+15. **Press, O. et al. (2022).** *Train Short, Test Long: Attention with Linear Biases (ALiBi).* ICLR 2022. Position-aware attention (architectural approach vs. PARA's retrieval-time approach).
+16. **Peng, B. et al. (2024).** *YaRN: Efficient Context Window Extension of Large Language Models.* ICLR 2024. Context-window extension method.
+
+**Note for paper writing:** §2 Related Work must cite refs 4–10 explicitly, one sentence each, stating what PARA shares with and differs from each. Not citing them is the fastest way to invite Objection 1.
 
 ---
 

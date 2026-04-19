@@ -498,15 +498,25 @@ Relevant facts:"""
 
     def apply_para(self, chunks: List[TextChunk], query: str,
                     alpha: float = 0.7, beta: float = 0.3, gamma: float = None,
-                    top_k: int = 10, full_text: str = None):
+                    top_k: int = 10, full_text: str = None,
+                    correction_type: str = "sin",
+                    adaptive_gamma: bool = True,
+                    use_cross_encoder: bool = True,
+                    use_multi_granularity: bool = True):
         """
         Position-Aware Retrieval Augmentation (PARA) — Enhanced.
 
-        Features:
-          - Semantic embeddings (all-MiniLM-L6-v2)
-          - Adaptive gamma (scales with document length)
-          - Multi-granularity retrieval (sentence + paragraph + section)
-          - Cross-encoder reranking for top results
+        NOVEL CONTRIBUTION: the sinusoidal position-bias correction term
+        (correction_type="sin") with adaptive gamma scaling.
+
+        Remaining components are established RAG techniques included as the
+        retrieval testbed — see RESEARCH_REFERENCE.md §10.1 for prior art.
+
+        Ablation flags:
+          correction_type:    "sin" | "gaussian" | "step" | "triangle" | "none"
+          adaptive_gamma:     if False, uses a fixed gamma=0.3
+          use_cross_encoder:  if False, skips 2nd-stage rerank
+          use_multi_granularity: if False, uses paragraph-level only
 
         Returns: (context_string, confidence_from_semantic_similarity)
         """
@@ -525,7 +535,9 @@ Relevant facts:"""
         retriever = PARARetriever()
         context, avg_semantic_sim = retriever.build_para_context(
             query, para_chunks, top_k=top_k, alpha=alpha, beta=beta,
-            gamma=gamma, use_cross_encoder=True, full_text=full_text,
+            gamma=gamma, use_cross_encoder=use_cross_encoder, full_text=full_text,
+            correction_type=correction_type, adaptive_gamma=adaptive_gamma,
+            use_multi_granularity=use_multi_granularity,
         )
         return context, avg_semantic_sim
 

@@ -247,13 +247,44 @@ class PARARetriever:
 
     @staticmethod
     def compute_position_bias_correction(
-        positions: List[float], gamma: float = 0.3
+        positions: List[float],
+        gamma: float = 0.3,
+        correction_type: str = "sin",
     ) -> np.ndarray:
         """
-        Sinusoidal position-bias correction.
-        correction_i = gamma * sin(pi * position_i)
+        Position-bias correction with pluggable correction function.
+
+        Supported correction types (for ablation):
+          - "sin"      → gamma * sin(pi * p)          [our proposed form]
+          - "gaussian" → gamma * exp(-((p-0.5)/0.2)^2) [peak at 0.5, smooth]
+          - "step"     → gamma if 0.25 <= p <= 0.75, else 0  [hand-tuned]
+          - "triangle" → gamma * (1 - 2*|p - 0.5|)     [linear peak at 0.5]
+          - "none"     → zeros, i.e. no position correction
         """
-        return np.array([gamma * math.sin(math.pi * p) for p in positions])
+        if correction_type == "none":
+            return np.zeros(len(positions))
+
+        if correction_type == "sin":
+            return np.array([gamma * math.sin(math.pi * p) for p in positions])
+
+        if correction_type == "gaussian":
+            # sigma=0.2 gives a smooth peak at 0.5, near-zero at edges
+            sigma = 0.2
+            return np.array([
+                gamma * math.exp(-((p - 0.5) ** 2) / (2 * sigma * sigma))
+                for p in positions
+            ])
+
+        if correction_type == "step":
+            return np.array([
+                gamma if 0.25 <= p <= 0.75 else 0.0
+                for p in positions
+            ])
+
+        if correction_type == "triangle":
+            return np.array([gamma * (1.0 - 2.0 * abs(p - 0.5)) for p in positions])
+
+        raise ValueError(f"Unknown correction_type: {correction_type}")
 
     def score_chunks(
         self,
@@ -262,19 +293,23 @@ class PARARetriever:
         alpha: float = 0.7,
         beta: float = 0.3,
         gamma: float = None,  # None = use adaptive gamma
+        correction_type: str = "sin",  # sin | gaussian | step | triangle | none
+        adaptive_gamma: bool = True,  # False = fixed gamma (for ablation)
     ) -> List[Tuple[TextChunk, float, float, float]]:
         """
-        Score all chunks using the PARA formula with adaptive gamma.
+        Score all chunks using the PARA formula.
 
-        Returns: List of (chunk, final_score, semantic_score, position_correction)
-                 sorted by final_score descending.
+        Ablation controls:
+          - correction_type="none"    → disables position correction
+          - adaptive_gamma=False      → uses fixed gamma (set gamma explicitly)
+          - beta=0                    → pure semantic retrieval (no correction)
         """
         if not chunks:
             return []
 
-        # Adaptive gamma based on document length
+        # Adaptive gamma based on document length (our proposed scaling)
         if gamma is None:
-            gamma = self.compute_adaptive_gamma(len(chunks))
+            gamma = self.compute_adaptive_gamma(len(chunks)) if adaptive_gamma else 0.3
 
         # Compute embeddings
         query_emb = self.embed_query(query)
@@ -284,9 +319,11 @@ class PARARetriever:
         # Semantic similarity
         semantic_scores = self.compute_semantic_scores(query_emb, chunk_embs)
 
-        # Position bias correction
+        # Position bias correction (controlled by correction_type)
         positions = [c.position for c in chunks]
-        pos_corrections = self.compute_position_bias_correction(positions, gamma)
+        pos_corrections = self.compute_position_bias_correction(
+            positions, gamma, correction_type=correction_type
+        )
 
         # PARA combined score
         final_scores = alpha * semantic_scores + beta * pos_corrections
@@ -357,9 +394,14 @@ class PARARetriever:
         beta: float = 0.3,
         gamma: float = None,
         use_cross_encoder: bool = True,
+        correction_type: str = "sin",
+        adaptive_gamma: bool = True,
     ) -> List[Tuple[TextChunk, float, float, float]]:
         """Return top-k chunks by PARA score, optionally reranked by cross-encoder."""
-        scored = self.score_chunks(query, chunks, alpha, beta, gamma)
+        scored = self.score_chunks(
+            query, chunks, alpha, beta, gamma,
+            correction_type=correction_type, adaptive_gamma=adaptive_gamma,
+        )
 
         if use_cross_encoder and len(scored) > 3:
             scored = self.cross_encoder_rerank(query, scored, top_n=min(k, len(scored)))
@@ -419,6 +461,9 @@ class PARARetriever:
         gamma: float = None,
         use_cross_encoder: bool = True,
         full_text: str = None,
+        correction_type: str = "sin",
+        adaptive_gamma: bool = True,
+        use_multi_granularity: bool = True,
     ) -> Tuple[str, float]:
         """
         Build a context string from the top-k PARA-scored chunks.
@@ -428,19 +473,19 @@ class PARARetriever:
         Returns:
             (context_string, avg_semantic_similarity)
         """
-        if full_text and len(full_text.split()) > 200:
+        if use_multi_granularity and full_text and len(full_text.split()) > 200:
             # Multi-granularity retrieval
             multi_results = self.retrieve_multi_granularity(
-                query, full_text, k_per_level=max(3, top_k // 3), alpha=alpha, beta=beta
+                query, full_text, k_per_level=max(3, top_k // 3),
+                alpha=alpha, beta=beta,
             )
             # Also get standard PARA results and merge
             standard_results = self.retrieve_top_k(
-                query, chunks, top_k, alpha, beta, gamma, use_cross_encoder
+                query, chunks, top_k, alpha, beta, gamma, use_cross_encoder,
+                correction_type=correction_type, adaptive_gamma=adaptive_gamma,
             )
-            # Merge and deduplicate
             all_results = multi_results + standard_results
             all_results.sort(key=lambda x: x[1], reverse=True)
-            # Deduplicate
             seen = set()
             scored = []
             for r in all_results:
@@ -452,7 +497,8 @@ class PARARetriever:
                     break
         else:
             scored = self.retrieve_top_k(
-                query, chunks, top_k, alpha, beta, gamma, use_cross_encoder
+                query, chunks, top_k, alpha, beta, gamma, use_cross_encoder,
+                correction_type=correction_type, adaptive_gamma=adaptive_gamma,
             )
 
         if not scored:
