@@ -50,17 +50,37 @@ cp .env.example .env
 # Edit .env and add GROQ_API_KEY and/or GEMINI_API_KEY
 ```
 
-### 2. Run the web interface
+### 2. Install API server dependencies (FastAPI)
 
 ```bash
-cd web
-npm install
-npm run dev
+pip install fastapi uvicorn python-multipart
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+### 3. Run the full stack
 
-### 3. Or run from the CLI
+Start all three services (Python API, Express proxy, React frontend):
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+Or start each service in its own terminal:
+
+```bash
+# Terminal 1 — Python RAG API (port 8000)
+uvicorn src.api:app --reload --port 8000
+
+# Terminal 2 — Express proxy (port 5000)
+cd server && npm install && node index.js
+
+# Terminal 3 — React + Vite frontend (port 3000)
+cd client && npm install && npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The Vite dev server proxies `/api` to Express on port 5000, which forwards to FastAPI on port 8000.
+
+### 4. Or run from the CLI
 
 ```bash
 # Summarize a PDF
@@ -142,10 +162,15 @@ RAG_RESEARCH_ENGINE/
 ├── data/uploads/               # Uploaded PDFs
 ├── results/                    # Ablation JSON output
 │
-└── web/                        # Next.js 14 frontend
-    └── src/
-        ├── app/                # Pages, API routes, theme
-        └── components/         # Chat UI, dashboard, logo
+├── src/api.py                  # FastAPI HTTP layer (port 8000)
+├── server/                     # Express.js API proxy (port 5000)
+│   ├── index.js
+│   └── routes/api.js
+├── client/                     # React + Vite frontend (JavaScript)
+│   └── src/
+│       ├── App.jsx
+│       └── components/         # ChatUI, Dashboard, StrategySelector
+└── web/                        # Legacy Next.js frontend (deprecated)
 ```
 
 ---
@@ -166,7 +191,7 @@ RAG_RESEARCH_ENGINE/
 ## Documentation
 
 - [`RESEARCH_REFERENCE.md`](RESEARCH_REFERENCE.md) — Research-paper-oriented reference. Covers the novel contribution, prior art citations, anticipated reviewer objections + rebuttals, and ablation protocol.
-- [`IMPLEMENTATION.md`](IMPLEMENTATION.md) — Complete implementation guide. Covers project structure, request flow, Python backend, PARA algorithm deep-dive, Next.js frontend, LLM providers, theme system, API reference, extension points, and troubleshooting.
+- [`IMPLEMENTATION.md`](IMPLEMENTATION.md) — Complete implementation guide. Covers project structure, request flow, Python backend, PARA algorithm deep-dive, React + Vite frontend, LLM providers, theme system, API reference, extension points, and troubleshooting.
 
 ---
 

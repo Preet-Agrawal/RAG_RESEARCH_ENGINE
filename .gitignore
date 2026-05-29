@@ -2,6 +2,13 @@
 .env
 *.env
 
+# Virtualenv & Node
+venv/
+.venv/
+.venv-test/
+node_modules/
+client/dist/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -33,7 +40,13 @@ results/
 data/
 .cache/
 *.csv
-*.json
+results/**/*.json
+!package.json
+!package-lock.json
+!client/package.json
+!client/package-lock.json
+!server/package.json
+!server/package-lock.json
 !config/*.json
 
 # IDE
