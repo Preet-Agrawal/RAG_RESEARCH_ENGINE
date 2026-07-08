@@ -222,8 +222,9 @@ export default function App() {
       }
     } catch (error) {
       console.error('Upload failed:', error);
+      const errMsg = error.response?.data?.error || error.message || 'Unknown error';
       setCurrentDocument(null);
-      showToast('Failed to upload PDF. Please try again.', 'error');
+      showToast(`Failed to upload PDF: ${errMsg}`, 'error');
       setIsUploading(false);
     }
   };

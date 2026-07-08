@@ -889,22 +889,14 @@ RAG_RESEARCH_ENGINE/
 │       └── llm_client.py       # Unified LLM client (Groq/OpenAI/Anthropic)
 │
 ├── data/uploads/               # Uploaded PDFs
+├── scripts/run_ablation.py     # Ablation experiment runner
 │
-└── web/                        # Next.js frontend
-    ├── src/app/
-    │   ├── page.tsx             # Main page (upload, chat, modals)
-    │   └── api/
-    │       ├── upload/route.ts
-    │       ├── ask/route.ts
-    │       ├── summarize/route.ts
-    │       ├── compare/route.ts
-    │       ├── benchmark/route.ts
-    │       └── kv-retrieval/route.ts
-    ├── src/components/
-    │   ├── ChatInterface.tsx
-    │   ├── PDFUploader.tsx
-    │   ├── EvaluationDashboard.tsx   # Position Recovery Test
-    │   ├── DocumentOverview.tsx
-    │   └── ...
-    └── src/types/index.ts       # TypeScript types
+├── src/api.py                  # FastAPI HTTP layer (port 8000)
+├── server/                     # Express.js API proxy (port 5000)
+│   ├── index.js
+│   └── routes/api.js
+└── client/                     # React + Vite frontend (port 3000)
+    └── src/
+        ├── App.jsx
+        └── components/         # ChatUI, Dashboard, StrategySelector
 ```

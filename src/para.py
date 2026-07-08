@@ -14,9 +14,11 @@ Core formula:
 Where gamma_adaptive = base_gamma * log(num_chunks) / log(10)
 """
 
+import hashlib
 import math
 import re
 import numpy as np
+from collections import OrderedDict
 from typing import List, Tuple, Optional
 from dataclasses import dataclass, field
 
@@ -52,6 +54,22 @@ def _get_cross_encoder(model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2")
     return _model_cache[key]
 
 
+# ── Embedding Cache ──────────────────────────────────────────────────────────
+# Caches chunk embeddings by exact text content, so asking multiple questions
+# about the same document doesn't re-embed identical chunks every time.
+
+_EMBEDDING_CACHE_MAX = 32
+_embedding_cache: "OrderedDict[str, np.ndarray]" = OrderedDict()
+
+
+def _embedding_cache_key(model_name: str, texts: List[str]) -> str:
+    digest = hashlib.sha256(model_name.encode("utf-8"))
+    for text in texts:
+        digest.update(b"\x00")
+        digest.update(text.encode("utf-8", errors="ignore"))
+    return digest.hexdigest()
+
+
 # ── Semantic Chunking ────────────────────────────────────────────────────────
 
 
@@ -72,11 +90,11 @@ def semantic_chunk_text(
     This preserves semantic coherence within each chunk.
     """
     # Split into paragraphs (or sentences for short docs)
-    paragraphs = [p.strip() for p in re.split(r'\n\s*\n|\n(?=[A-Z])', text) if p.strip()]
+    paragraphs = [p.strip() for p in re.split(r'\n\s*\n|\n(?=[A-Z])', text) if p.strip()]    #paragraph k hisaab s chunking
 
     # If too few paragraphs, fall back to sentence splitting
     if len(paragraphs) < 5:
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = re.split(r'(?<=[.!?])\s+', text)          # Sentence k hisaab s chunking
         paragraphs = [s.strip() for s in sentences if s.strip() and len(s.split()) > 3]
 
     if not paragraphs:
@@ -95,7 +113,7 @@ def semantic_chunk_text(
 
     for i in range(1, len(paragraphs)):
         # Cosine similarity between consecutive paragraphs
-        sim = float(embeddings[i] @ embeddings[i - 1])
+        sim = float(embeddings[i] @ embeddings[i - 1])    # dot product between normalized vectors.
 
         para_words = len(paragraphs[i].split())
 
@@ -214,8 +232,22 @@ class PARARetriever:
         self.model = _get_model(model_name)
 
     def embed_texts(self, texts: List[str]) -> np.ndarray:
-        """Encode a list of texts into embeddings."""
-        return self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+        """Encode a list of texts into embeddings, cached by exact content."""
+        if not texts:
+            return np.empty((0,))
+
+        key = _embedding_cache_key(self.model_name, texts)
+        cached = _embedding_cache.get(key)
+        if cached is not None:
+            _embedding_cache.move_to_end(key)
+            return cached
+
+        embeddings = self.model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+        _embedding_cache[key] = embeddings
+        _embedding_cache.move_to_end(key)
+        if len(_embedding_cache) > _EMBEDDING_CACHE_MAX:
+            _embedding_cache.popitem(last=False)
+        return embeddings
 
     def embed_query(self, query: str) -> np.ndarray:
         """Encode a single query into an embedding."""
@@ -225,7 +257,7 @@ class PARARetriever:
         self, query_embedding: np.ndarray, chunk_embeddings: np.ndarray
     ) -> np.ndarray:
         """Cosine similarity between query and each chunk."""
-        return chunk_embeddings @ query_embedding
+        return chunk_embeddings @ query_embedding     #dot product between chunk and query vectors
 
     @staticmethod
     def compute_adaptive_gamma(num_chunks: int, base_gamma: float = 0.3) -> float:

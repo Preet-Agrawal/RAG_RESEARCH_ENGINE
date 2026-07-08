@@ -7,7 +7,7 @@ import sys
 import json
 import os
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from dataclasses import dataclass
 
 # Add src to path
@@ -155,38 +155,41 @@ class MiddleRecoveryProcessor:
         max_possible = len(query_words) * 4.0
         return min(score / max_possible, 1.0) if max_possible > 0 else 0.0
 
+    def _score_chunks(self, chunks: List[TextChunk], query: str) -> List[Tuple[TextChunk, float]]:
+        """Score every chunk's relevance to the query via keyword matching."""
+        return [(chunk, self._compute_relevance_score(query, chunk.content)) for chunk in chunks]
+
+    @staticmethod
+    def _place_at_edges(scored_chunks: List[Tuple[TextChunk, float]]) -> List[Tuple[TextChunk, float]]:
+        """
+        Alternate highest-relevance items to the start/end, lowest in the middle.
+        Assumes scored_chunks is already sorted by relevance (descending).
+        """
+        n = len(scored_chunks)
+        result = [None] * n
+        left, right = 0, n - 1
+        for i, item in enumerate(scored_chunks):
+            if i % 2 == 0:
+                result[left] = item
+                left += 1
+            else:
+                result[right] = item
+                right -= 1
+        return result
+
     def apply_relevance_restructuring(self, chunks: List[TextChunk], query: str) -> str:
         """
         Restructure chunks to place likely-relevant content at edges (start/end).
         Less relevant content goes to the middle where attention is lower.
         """
-        # Score relevance using improved keyword matching
-        scored_chunks = []
-        for chunk in chunks:
-            score = self._compute_relevance_score(query, chunk.content)
-            scored_chunks.append((chunk, score))
-
-        # Sort by relevance (descending)
+        scored_chunks = self._score_chunks(chunks, query)
         scored_chunks.sort(key=lambda x: x[1], reverse=True)
-
-        # Place high-relevance at edges, low-relevance in middle
-        restructured = [None] * len(chunks)
-        left_idx = 0
-        right_idx = len(chunks) - 1
-
-        for i, (chunk, score) in enumerate(scored_chunks):
-            if i % 2 == 0:
-                restructured[left_idx] = chunk
-                left_idx += 1
-            else:
-                restructured[right_idx] = chunk
-                right_idx -= 1
+        restructured = self._place_at_edges(scored_chunks)
 
         # Build context with restructured order
         parts = [f"Question: {query}\n\nDocuments (organized by relevance):\n"]
-        for i, chunk in enumerate(restructured):
-            if chunk:
-                parts.append(f"\n[Section {i+1}]\n{chunk.content}\n")
+        for i, (chunk, _) in enumerate(restructured):
+            parts.append(f"\n[Section {i+1}]\n{chunk.content}\n")
 
         return "\n".join(parts)
 
@@ -230,11 +233,7 @@ Relevant information:"""
         - Keep relevant chunks in full
         - Place full chunks at attention-rich positions (edges)
         """
-        # Score all chunks for relevance
-        scored_chunks = []
-        for chunk in chunks:
-            score = self._compute_relevance_score(query, chunk.content)
-            scored_chunks.append((chunk, score))
+        scored_chunks = self._score_chunks(chunks, query)
 
         # Determine threshold for "relevant" (top 40%)
         scores = [s for _, s in scored_chunks]
@@ -333,11 +332,7 @@ Compressed summaries:"""
         3. Attention anchoring with section markers
         4. Question injection throughout
         """
-        # Score using improved relevance computation
-        scored_chunks = []
-        for chunk in chunks:
-            score = self._compute_relevance_score(query, chunk.content)
-            scored_chunks.append((chunk, score))
+        scored_chunks = self._score_chunks(chunks, query)
 
         # Sort: highest relevance first, then by original position
         scored_chunks.sort(key=lambda x: (-x[1], x[0].position))
@@ -376,36 +371,10 @@ Compressed summaries:"""
         Reranking Prompt: Place most relevant docs first and last.
         Strategic placement exploits primacy and recency bias in LLMs.
         """
-        # Score all chunks
-        scored_chunks = []
-        for chunk in chunks:
-            score = self._compute_relevance_score(query, chunk.content)
-            scored_chunks.append((chunk, score))
-
-        # Sort by relevance descending
+        # Most relevant at start/end (alternating), least relevant fills the middle
+        scored_chunks = self._score_chunks(chunks, query)
         scored_chunks.sort(key=lambda x: x[1], reverse=True)
-
-        # Rerank: most relevant at start, second most relevant at end, least relevant in middle
-        reranked = []
-        for i, (chunk, score) in enumerate(scored_chunks):
-            if i % 2 == 0:
-                reranked.insert(len(reranked) // 2 if i > 0 else 0, (chunk, score))
-            else:
-                reranked.append((chunk, score))
-
-        # Actually do proper first/last placement:
-        # Top half goes to edges (alternating start/end), bottom half fills middle
-        sorted_by_relevance = sorted(scored_chunks, key=lambda x: x[1], reverse=True)
-        n = len(sorted_by_relevance)
-        result = [None] * n
-        left, right = 0, n - 1
-        for i, item in enumerate(sorted_by_relevance):
-            if i % 2 == 0:
-                result[left] = item
-                left += 1
-            else:
-                result[right] = item
-                right -= 1
+        result = self._place_at_edges(scored_chunks)
 
         parts = []
         parts.append(f"You are a helpful assistant. Answer the question using ONLY the provided context.")
@@ -667,7 +636,7 @@ def _build_resilient_client(
     def _add_gemini():
         if not gemini_key:
             return
-        for model_name in ["gemini-2.5-flash", "gemini-1.5-flash-8b"]:
+        for model_name in ["gemini-2.5-flash"]:
             clients.append(LLMClient(
                 provider="gemini", model=model_name,
                 temperature=temperature, api_key=gemini_key,
@@ -803,7 +772,6 @@ def extract_text_from_pdf(pdf_path: str) -> str:
 GROQ_MODEL_FALLBACK = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
-    "gemma2-9b-it",
 ]
 
 

@@ -166,11 +166,10 @@ RAG_RESEARCH_ENGINE/
 ├── server/                     # Express.js API proxy (port 5000)
 │   ├── index.js
 │   └── routes/api.js
-├── client/                     # React + Vite frontend (JavaScript)
-│   └── src/
-│       ├── App.jsx
-│       └── components/         # ChatUI, Dashboard, StrategySelector
-└── web/                        # Legacy Next.js frontend (deprecated)
+└── client/                     # React + Vite frontend (JavaScript)
+    └── src/
+        ├── App.jsx
+        └── components/         # ChatUI, Dashboard, StrategySelector
 ```
 
 ---

@@ -55,6 +55,16 @@ from process_pdf import (
     MiddleRecoveryProcessor,
     PARA_AVAILABLE,
 )
+from src.core.llm_client import _is_rate_limit_error
+
+# Delay between consecutive LLM calls. The app's ResilientLLMClient fails
+# over across providers instantly (by design, for interactive use), but that
+# means a burst of back-to-back calls here can exhaust every provider's free
+# -tier quota within a couple of minutes, silently turning "PARA failed" into
+# "every provider was rate-limited" (see IMPLEMENTATION.md §13a.6).
+CALL_DELAY_SEC = 2.0
+RATE_LIMIT_RETRY_DELAY_SEC = 15.0
+RETRY_DELAY_SEC = 5.0
 
 
 # ── Experiment definitions ──────────────────────────────────────────────────
@@ -184,29 +194,55 @@ def run_one_config(
             chunks = processor.chunk_text(modified, chunk_size=400, overlap=50)
 
             t_start = time.time()
-            try:
-                context, sem_sim = processor.apply_para(
-                    chunks, NEEDLE_QUESTION, full_text=modified, **para_kwargs
-                )
-                if len(context) > 24000:
-                    context = context[:24000]
+            attempt = 0
+            while True:
+                attempt += 1
+                try:
+                    context, sem_sim = processor.apply_para(
+                        chunks, NEEDLE_QUESTION, full_text=modified, **para_kwargs
+                    )
+                    if len(context) > 24000:
+                        context = context[:24000]
 
-                prompt = (
-                    f"{context}\n\n---\nQuestion: {NEEDLE_QUESTION}\n"
-                    "Answer directly. If the document does not contain the answer, say so:"
-                )
-                resp = client.generate(
-                    prompt,
-                    system_prompt=processor.get_system_prompt("para"),
-                )
-                answer_text = resp.text
-            except Exception as e:
-                answer_text = f"[ERROR] {e}"
-                sem_sim = 0.0
+                    prompt = (
+                        f"{context}\n\n---\nQuestion: {NEEDLE_QUESTION}\n"
+                        "Answer directly. If the document does not contain the answer, say so:"
+                    )
+                    resp = client.generate(
+                        prompt,
+                        system_prompt=processor.get_system_prompt("para"),
+                    )
+                    answer_text = resp.text
+                    break
+                except Exception as e:
+                    # Every provider in the fallback chain rejected the call.
+                    # Observed causes in practice: 429 rate-limit, 413
+                    # payload-too-large on a small fallback model, and
+                    # (before the dead-model fix) a 400/404 from a
+                    # decommissioned model — all transient/load-dependent,
+                    # and all reproduce as a clean success on a fresh
+                    # attempt a few seconds later. So retry once regardless
+                    # of error shape instead of only pattern-matching
+                    # rate-limit text, which missed the 413 case entirely.
+                    if attempt == 1:
+                        delay = (
+                            RATE_LIMIT_RETRY_DELAY_SEC
+                            if _is_rate_limit_error(e)
+                            else RETRY_DELAY_SEC
+                        )
+                        time.sleep(delay)
+                        continue
+                    answer_text = f"[ERROR] {type(e).__name__}: {e}"
+                    sem_sim = 0.0
+                    break
 
             run_found.append(1 if found_needle(answer_text) else 0)
             run_latency.append(time.time() - t_start)
             run_semantic.append(float(sem_sim))
+            if run_idx == num_runs - 1:
+                last_answer = answer_text[:300]
+
+            time.sleep(CALL_DELAY_SEC)
 
         per_position.append({
             "position": int(pos * 100),
@@ -215,6 +251,7 @@ def run_one_config(
             "latency_mean": sum(run_latency) / len(run_latency),
             "semantic_mean": sum(run_semantic) / len(run_semantic),
             "raw_found": run_found,
+            "last_answer_sample": last_answer,
         })
 
     # Overall metrics
