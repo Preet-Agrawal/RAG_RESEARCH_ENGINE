@@ -142,8 +142,10 @@ EXPERIMENTS = {
 # ── Needle probe ────────────────────────────────────────────────────────────
 
 
-NEEDLE_FACT = "The secret code for the research project is ALPHA-7749-OMEGA."
-NEEDLE_QUESTION = "What is the secret code for the research project?"
+NEEDLE_FACT = ("According to the Kirchner benchmark, virtual function dispatch "
+               "adds 7 nanoseconds of overhead per call.")
+NEEDLE_QUESTION = ("According to the Kirchner benchmark, how many nanoseconds "
+                    "of overhead does virtual function dispatch add per call?")
 
 
 def insert_needle(pdf_text: str, position: float) -> str:
@@ -154,8 +156,8 @@ def insert_needle(pdf_text: str, position: float) -> str:
 
 
 def found_needle(answer: str) -> bool:
-    upper = (answer or "").upper()
-    return "7749" in upper or "ALPHA-7749" in upper
+    ans = (answer or "").lower()
+    return "7 nanosecond" in ans or "7ns" in ans or ("kirchner" in ans and "7" in ans)
 
 
 # ── Single-config evaluator ─────────────────────────────────────────────────
