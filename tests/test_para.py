@@ -9,6 +9,7 @@ import math
 import numpy as np
 import pytest
 
+import src.para as para_module
 from src.para import PARARetriever, multi_granularity_chunks
 
 
@@ -95,3 +96,63 @@ def test_multi_granularity_chunks_splits_into_sane_sentence_and_paragraph_counts
         positions = [c.position for c in level_chunks]
         assert positions == sorted(positions)
         assert all(0.0 <= p <= 1.0 for p in positions)
+
+
+# ── retrieve_multi_granularity correction_type propagation (regression) ─────
+#
+# Bug: retrieve_multi_granularity() never passed correction_type/gamma/
+# adaptive_gamma through to its internal score_chunks() call, so it silently
+# used score_chunks()'s own default ("sin") regardless of what the caller
+# (build_para_context / apply_para) requested. correction_type="none" looked
+# like it disabled position correction but didn't, when reached via
+# use_multi_granularity=True (the production default).
+
+
+def test_retrieve_multi_granularity_propagates_correction_type_none(monkeypatch):
+    # Stub model loading and embeddings so this never touches
+    # sentence-transformers (not installed in this test environment, and not
+    # needed): _get_model is patched so PARARetriever() can be constructed
+    # without a real model, and embed_query/embed_texts return a constant,
+    # parallel vector so every chunk gets cosine similarity 1.0 to the query
+    # regardless of content or position. That isolates position correction as
+    # the *only* possible source of score variation.
+    monkeypatch.setattr(para_module, "_get_model", lambda model_name: None)
+    monkeypatch.setattr(
+        PARARetriever, "embed_query",
+        lambda self, query: np.array([1.0, 0.0]),
+    )
+    monkeypatch.setattr(
+        PARARetriever, "embed_texts",
+        lambda self, texts: np.tile(np.array([1.0, 0.0]), (len(texts), 1)),
+    )
+
+    text = (
+        "Alpha sentence starts the document right at the very beginning part.\n"
+        "\n"
+        "Beta sentence sits somewhere in the middle of the whole document body.\n"
+        "\n"
+        "Gamma sentence continues further along in the middle region as well.\n"
+        "\n"
+        "Delta sentence closes out the document near its very final ending part.\n"
+    )
+
+    retriever = PARARetriever()
+    results = retriever.retrieve_multi_granularity(
+        "irrelevant query", text, k_per_level=5, alpha=0.7, beta=0.3,
+        correction_type="none",
+    )
+
+    assert results, "expected at least one candidate"
+
+    # With correction_type="none" genuinely propagated, position correction
+    # must be exactly zero for every candidate, regardless of its position
+    # (a chunk sitting mid-document would get a large nonzero "sin" boost if
+    # the bug were still present).
+    pos_corrections = [pos_corr for (_chunk, _final, _sem, pos_corr) in results]
+    assert pos_corrections == pytest.approx([0.0] * len(pos_corrections), abs=1e-9)
+
+    # Semantic similarity is pinned at 1.0 for every chunk, so with no
+    # position contribution every final score must equal alpha (0.7) exactly
+    # -- no positional spread between chunks.
+    final_scores = [final for (_chunk, final, _sem, _pos) in results]
+    assert final_scores == pytest.approx([0.7] * len(final_scores), abs=1e-9)

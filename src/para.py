@@ -448,6 +448,9 @@ class PARARetriever:
         k_per_level: int = 5,
         alpha: float = 0.7,
         beta: float = 0.3,
+        gamma: float = None,
+        correction_type: str = "sin",
+        adaptive_gamma: bool = True,
     ) -> List[Tuple[TextChunk, float, float, float]]:
         """
         Retrieve from sentence, paragraph, and section levels simultaneously.
@@ -461,7 +464,10 @@ class PARARetriever:
         for level_name, level_chunks in granularities.items():
             if not level_chunks:
                 continue
-            scored = self.score_chunks(query, level_chunks, alpha, beta)
+            scored = self.score_chunks(
+                query, level_chunks, alpha, beta, gamma,
+                correction_type=correction_type, adaptive_gamma=adaptive_gamma,
+            )
             all_candidates.extend(scored[:k_per_level])
 
         # Deduplicate: if two chunks overlap >50% in words, keep the higher-scored one
@@ -510,7 +516,8 @@ class PARARetriever:
             # Multi-granularity retrieval
             multi_results = self.retrieve_multi_granularity(
                 query, full_text, k_per_level=max(3, top_k // 3),
-                alpha=alpha, beta=beta,
+                alpha=alpha, beta=beta, gamma=gamma,
+                correction_type=correction_type, adaptive_gamma=adaptive_gamma,
             )
             # Also get standard PARA results and merge
             standard_results = self.retrieve_top_k(
