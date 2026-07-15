@@ -253,8 +253,9 @@ class PARARetriever:
         """Encode a single query into an embedding."""
         return self.model.encode([query], convert_to_numpy=True, normalize_embeddings=True)[0]
 
+    @staticmethod
     def compute_semantic_scores(
-        self, query_embedding: np.ndarray, chunk_embeddings: np.ndarray
+        query_embedding: np.ndarray, chunk_embeddings: np.ndarray
     ) -> np.ndarray:
         """Cosine similarity between query and each chunk."""
         return chunk_embeddings @ query_embedding     #dot product between chunk and query vectors
