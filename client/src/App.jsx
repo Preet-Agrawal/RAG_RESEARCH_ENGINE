@@ -21,7 +21,6 @@ function saveChats(chats) {
     /* ignore */
   }
 }
-
 function ThemeToggle() {
   const [theme, setTheme] = useState(null);
 

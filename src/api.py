@@ -2,6 +2,7 @@
 FastAPI HTTP layer for the RAG Research Engine.
 Reuses logic from process_pdf.py — does not duplicate RAG implementation.
 """
+import os
 import sys
 import time
 from pathlib import Path
@@ -41,12 +42,12 @@ VALID_STRATEGIES = [
 
 app = FastAPI(title="RAG Research Engine API")
 
+_default_origins = "http://localhost:3000,http://localhost:5000"
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5000",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
